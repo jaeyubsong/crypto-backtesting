@@ -4,21 +4,198 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a crypto-trading project in its initial setup phase. The project uses Python 3.13+ and is configured with a minimal pyproject.toml file.
+This is a crypto-trading backtesting platform that enables quantitative cryptocurrency traders to develop, test, and analyze algorithmic trading strategies using historical market data. The platform uses Python 3.13+, FastAPI, and follows strict TDD and SOLID principles.
 
-## Project Structure
+## 🚨 CRITICAL DEVELOPMENT RULES
 
-Currently, this is a fresh Python project with:
-- `pyproject.toml` - Python project configuration (minimal setup, no dependencies yet)
-- `.venv/` - Python virtual environment
-- `.idea/` - PyCharm/IntelliJ IDE configuration
+### 1. Test-Driven Development (TDD) - MANDATORY
 
-## Development Setup
+**ALWAYS follow the TDD cycle for core business logic:**
+1. **RED**: Write a failing test FIRST
+2. **GREEN**: Write minimal code to make the test pass
+3. **REFACTOR**: Improve the code while keeping tests green
 
-This project uses `uv` for Python package management:
+**TDD Workflow:**
+```bash
+# 1. Create test file first
+# 2. Write failing test
+# 3. Run test to see it fail: uv run pytest tests/test_specific.py -v
+# 4. Implement minimal code
+# 5. Run test to see it pass
+# 6. Refactor if needed
+# 7. Run all tests: uv run pytest
+```
 
-1. **Sync dependencies**: `uv sync`
-2. **Install project in development mode**: `uv pip install -e .`
+**Testing Philosophy:**
+- Test BEHAVIOR, not implementation details
+- Focus on public APIs and critical business logic
+- Helper functions should be tested through their usage in main functions
+- Don't test trivial getters/setters or simple data classes
+- Integration tests can cover multiple units together
+
+### 2. Commit Frequency
+
+**Commit after EVERY:**
+- Test written (even if failing)
+- Test passing (green phase)
+- Refactoring completed
+- Small feature completed
+- Bug fix implemented
+
+**Commit message format:**
+```
+test: Add test for [feature]
+feat: Implement [feature] to pass test
+refactor: Improve [component] structure
+fix: Resolve [issue] in [component]
+docs: Update [documentation]
+chore: Update dependencies/configuration
+```
+
+**Run before EVERY commit:**
+```bash
+uv run pytest  # All tests must pass
+uv run ruff check --fix  # Fix linting issues
+```
+
+### 3. SOLID Principles
+
+**S - Single Responsibility Principle**
+- Each class/module should have ONE reason to change
+- Split large classes into smaller, focused ones
+- Example: Separate data loading, processing, and storage into different classes
+
+**O - Open/Closed Principle**
+- Open for extension, closed for modification
+- Use abstract base classes and interfaces
+- Example: `Strategy` base class that can be extended without modifying engine
+
+**L - Liskov Substitution Principle**
+- Derived classes must be substitutable for base classes
+- Don't break parent class contracts
+- Example: All Strategy subclasses must work with the BacktestEngine
+
+**I - Interface Segregation Principle**
+- Many specific interfaces are better than one general interface
+- Don't force classes to implement methods they don't use
+- Example: Separate interfaces for DataReader, DataWriter, DataProcessor
+
+**D - Dependency Inversion Principle**
+- Depend on abstractions, not concrete implementations
+- Use dependency injection
+- Example: Portfolio should depend on IOrderExecutor interface, not specific implementation
+
+### 4. Scalability Rules
+
+**File Organization:**
+```
+src/
+├── core/           # Core domain logic (pure Python, no external deps)
+│   ├── models/     # Domain models
+│   ├── interfaces/ # Abstract interfaces
+│   └── exceptions/ # Domain exceptions
+├── infrastructure/ # External dependencies
+│   ├── data/       # Data access layer
+│   ├── cache/      # Caching implementations
+│   └── storage/    # File/DB storage
+├── application/    # Use cases/services
+│   ├── services/   # Business logic services
+│   └── dto/        # Data transfer objects
+└── api/           # API layer
+    ├── routers/    # FastAPI routers
+    └── schemas/    # Pydantic schemas
+```
+
+**Module Rules:**
+- **Maximum file size**: 300 lines (split if larger)
+- **Maximum function size**: 30 lines (extract if larger)
+- **Maximum class size**: 150 lines (decompose if larger)
+- **Maximum function parameters**: 5 (use data classes if more needed)
+- **Maximum cyclomatic complexity**: 10 (simplify if higher)
+
+**Import Rules:**
+- Core layer: NO external dependencies
+- Infrastructure: Can import from core
+- Application: Can import from core and infrastructure
+- API: Can import from all layers
+- NEVER create circular dependencies
+
+### 5. LLM-Friendly Coding Practices
+
+**Documentation:**
+- EVERY module must have a docstring explaining its purpose
+- EVERY class must have a docstring with responsibility description
+- EVERY public method must have a docstring with parameters and return types
+- Use type hints EVERYWHERE
+
+**Naming Conventions:**
+- Use descriptive names (avoid abbreviations)
+- Classes: PascalCase (e.g., `BacktestEngine`)
+- Functions/variables: snake_case (e.g., `calculate_sharpe_ratio`)
+- Constants: UPPER_SNAKE_CASE (e.g., `DEFAULT_LEVERAGE`)
+- Private methods: prefix with underscore (e.g., `_validate_input`)
+
+**Code Structure:**
+- One class per file (with its related exceptions/types)
+- Group related functionality in modules
+- Use factory patterns for complex object creation
+- Implement builder patterns for objects with many parameters
+
+### 6. Testing Standards
+
+**Test Organization:**
+```
+tests/
+├── unit/          # Unit tests (isolated, mocked dependencies)
+├── integration/   # Integration tests (real dependencies)
+├── e2e/          # End-to-end tests (full workflow)
+└── fixtures/     # Shared test data and utilities
+```
+
+**Test Naming:**
+```python
+def test_should_[expected_behavior]_when_[condition]():
+    # Arrange
+    # Act
+    # Assert
+```
+
+**Coverage Guidelines:**
+- Minimum overall coverage: 80%
+- Core business logic: 90%+
+- API endpoints: 85%+
+- Helper/utility functions: Covered through usage
+- Data models/DTOs: No direct tests needed
+- Configuration classes: No tests needed
+
+**What to Test:**
+- Business logic and algorithms
+- Edge cases and error conditions
+- Public API contracts
+- Integration points
+- Complex data transformations
+
+**What NOT to Test:**
+- Simple getters/setters
+- Configuration classes
+- Third-party library calls (mock them)
+- Framework functionality
+- Trivial type conversions
+
+### 7. Performance Considerations
+
+**Data Handling:**
+- Use generators for large datasets
+- Implement pagination for API responses
+- Cache frequently accessed data
+- Use numpy/pandas efficiently (vectorized operations)
+- Batch database operations when possible
+
+**Async Patterns:**
+- Use async/await for I/O operations
+- Implement connection pooling
+- Use background tasks for long-running operations
+- Don't block the event loop
 
 ## Common Commands
 
@@ -27,7 +204,9 @@ This project uses `uv` for Python package management:
 - **Fix linting issues**: `uv run ruff check --fix`
 - **Format code**: `uv run ruff format`
 - **Run tests**: `uv run pytest`
+- **Run specific test**: `uv run pytest tests/test_file.py::test_function -v`
 - **Run tests with coverage**: `uv run pytest --cov`
+- **Run tests in watch mode**: `uv run pytest-watch`
 - **Run pre-commit on all files**: `uv run pre-commit run --all-files`
 
 ### Package Management
@@ -36,17 +215,129 @@ This project uses `uv` for Python package management:
 - **Sync dependencies**: `uv sync`
 - **Run any command in venv**: `uv run <command>`
 
-### Project Specific (to be implemented)
+### Project Specific
 - **Start development server**: `uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000`
-- **Run backtest**: `uv run python -m src.backtesting.cli`
+- **Run backtest CLI**: `uv run python -m src.backtesting.cli`
 
-## Architecture Notes
+## Architecture Guidelines
 
-This project appears to be focused on cryptocurrency trading. As the codebase grows, consider organizing around:
-- Trading strategies
-- Market data handling
-- Portfolio management
-- Risk management
-- Backtesting framework
+### Layer Responsibilities
 
-The project currently has no source code, so the specific architecture will emerge as development progresses.
+**Core Layer (src/core/)**
+- Pure business logic
+- Domain models and entities
+- Business rules and validations
+- No external dependencies
+
+**Infrastructure Layer (src/infrastructure/)**
+- Data access (CSV, database)
+- External service integration
+- Caching mechanisms
+- File system operations
+
+**Application Layer (src/application/)**
+- Use case orchestration
+- Service coordination
+- Transaction management
+- DTO transformations
+
+**API Layer (src/api/)**
+- HTTP request/response handling
+- Input validation
+- Authentication/authorization
+- Error response formatting
+
+### Design Patterns to Use
+
+1. **Repository Pattern**: For data access abstraction
+2. **Factory Pattern**: For strategy creation
+3. **Observer Pattern**: For event-driven updates
+4. **Strategy Pattern**: For trading strategies (already in use)
+5. **Decorator Pattern**: For adding functionality (caching, logging)
+6. **Command Pattern**: For backtest operations
+7. **Builder Pattern**: For complex object construction
+
+## Error Handling Strategy
+
+**Exception Hierarchy:**
+```python
+BacktestException (base)
+├── ValidationError (invalid input)
+├── DataError (data access issues)
+├── StrategyError (strategy execution)
+├── CalculationError (metrics/math)
+└── ConfigurationError (setup issues)
+```
+
+**Error Response Format:**
+- Always return structured error responses
+- Include error code, message, and details
+- Log errors with correlation IDs
+- Never expose internal implementation details
+
+## Code Review Checklist
+
+Before submitting any code, ensure:
+
+- [ ] Tests written FIRST for business logic (TDD)
+- [ ] All tests passing
+- [ ] Code coverage >= 80% overall
+- [ ] No linting errors
+- [ ] SOLID principles followed
+- [ ] No files > 300 lines
+- [ ] No functions > 30 lines
+- [ ] No circular dependencies
+- [ ] Type hints on all functions
+- [ ] Docstrings on all public APIs
+- [ ] Committed frequently with clear messages
+
+## Performance Guidelines
+
+**Response Time Targets:**
+- API endpoints: < 200ms (p95)
+- Backtest execution: < 1s per 1000 candles
+- Data loading: < 500ms per file
+
+**Memory Usage:**
+- Keep memory footprint under 1GB for typical backtest
+- Use streaming for large datasets
+- Clear unused data promptly
+
+## Security Considerations
+
+**Input Validation:**
+- Validate ALL user inputs
+- Use Pydantic for schema validation
+- Sanitize file paths
+- Limit file upload sizes
+
+**Code Execution:**
+- Sandbox user strategies
+- Restrict imports in strategies
+- Set execution timeouts
+- Monitor resource usage
+
+## Deployment Readiness
+
+**Health Checks:**
+- Implement /health endpoint
+- Include dependency checks
+- Monitor critical metrics
+
+**Configuration:**
+- Use environment variables
+- Separate configs per environment
+- Never commit secrets
+
+## Suggested Additional Rules
+
+Would you like me to add any of these?
+
+1. **Logging Standards**: Structured logging with correlation IDs
+2. **API Versioning**: Start with /api/v1/ prefix
+3. **Feature Flags**: For gradual feature rollout
+4. **Rate Limiting**: API request limits
+5. **Caching Strategy**: TTL and invalidation rules
+6. **Database Migration**: Alembic setup when needed
+7. **Monitoring**: OpenTelemetry instrumentation
+8. **CI/CD Pipeline**: GitHub Actions configuration
