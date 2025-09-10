@@ -27,3 +27,32 @@ class IDataProcessor(ABC):
     def validate_data(self, data: pd.DataFrame) -> bool:
         """Validate data integrity."""
         pass
+
+    @abstractmethod
+    def clean_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Clean and normalize data."""
+        pass
+
+    @abstractmethod
+    def resample_data(self, data: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+        """Resample data to different timeframe."""
+        pass
+
+
+class IMetricsCalculator(ABC):
+    """Abstract interface for performance metrics calculation."""
+
+    @abstractmethod
+    def calculate_returns(self, portfolio_history: pd.DataFrame) -> dict[str, float]:
+        """Calculate return metrics."""
+        pass
+
+    @abstractmethod
+    def calculate_risk_metrics(self, portfolio_history: pd.DataFrame) -> dict[str, float]:
+        """Calculate risk-adjusted metrics."""
+        pass
+
+    @abstractmethod
+    def calculate_trade_metrics(self, trades: pd.DataFrame) -> dict[str, float]:
+        """Calculate trade statistics."""
+        pass
