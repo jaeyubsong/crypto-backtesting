@@ -1,6 +1,6 @@
 # Technical Specification: Crypto Quant Backtesting Platform
 
-**Version:** 1.0  
+**Version:** 1.0
 **Date:** September 10, 2025
 
 ## 1. System Architecture Overview
@@ -246,7 +246,7 @@ class BacktestEngine:
         self.portfolio = Portfolio(config.initial_capital, config.trading_mode)
         self.data_loader = DataLoader()
         self.metrics_calculator = MetricsCalculator()
-        
+
     async def run_backtest(self, strategy_code: str) -> BacktestResults:
         # 1. Load and validate market data
         # 2. Execute user strategy
@@ -267,23 +267,23 @@ class Portfolio:
         self.trading_mode = trading_mode
         self.trades = []
         self.portfolio_history = []
-        
+
     def buy(self, symbol: str, quantity: float, price: float, leverage: float = 1.0):
         # Implementation for long positions
         pass
-        
+
     def sell(self, symbol: str, quantity: float, price: float, leverage: float = 1.0):
         # Implementation for short positions
         pass
-        
+
     def close_position(self, symbol: str, percentage: float = 100.0):
         # Close partial or full position
         pass
-        
+
     def check_liquidation(self, current_prices: dict) -> List[str]:
         # Check for liquidation conditions
         pass
-        
+
     def calculate_margin_ratio(self) -> float:
         # Calculate current margin ratio
         pass
@@ -300,40 +300,40 @@ class Strategy(ABC):
     def __init__(self, portfolio: Portfolio):
         self.portfolio = portfolio
         self.indicators = {}
-        
+
     @abstractmethod
     def initialize(self):
         """Called once at the start of backtesting"""
         pass
-        
+
     @abstractmethod
     def on_data(self, data: pd.Series):
         """Called for each new data point"""
         pass
-        
+
     # Trading API
     def buy(self, amount: float, leverage: float = 1.0):
         return self.portfolio.buy(self.symbol, amount, self.current_price, leverage)
-        
+
     def sell(self, amount: float, leverage: float = 1.0):
         return self.portfolio.sell(self.symbol, amount, self.current_price, leverage)
-        
+
     def close_position(self, percentage: float = 100.0):
         return self.portfolio.close_position(self.symbol, percentage)
-        
+
     # Information API
     def get_position_size(self) -> float:
         return self.portfolio.get_position_size(self.symbol)
-        
+
     def get_cash(self) -> float:
         return self.portfolio.cash
-        
+
     def get_margin_ratio(self) -> float:
         return self.portfolio.calculate_margin_ratio()
-        
+
     def get_unrealized_pnl(self) -> float:
         return self.portfolio.get_unrealized_pnl(self.symbol, self.current_price)
-        
+
     def get_leverage(self) -> float:
         position = self.portfolio.positions.get(self.symbol)
         return position.leverage if position else 0.0
@@ -346,33 +346,33 @@ class Strategy(ABC):
 class StrategyExecutor:
     def __init__(self, portfolio: Portfolio):
         self.portfolio = portfolio
-        
+
     def execute_strategy(self, strategy_code: str, market_data: pd.DataFrame) -> ExecutionResults:
         try:
             # 1. Create strategy class from user code
             strategy_class = self._compile_strategy(strategy_code)
             strategy = strategy_class(self.portfolio)
-            
+
             # 2. Initialize strategy
             strategy.initialize()
-            
+
             # 3. Run strategy on historical data
             for timestamp, row in market_data.iterrows():
                 strategy.symbol = row['symbol']  # Set current symbol
                 strategy.current_price = row['close']  # Set current price
                 strategy.timestamp = timestamp
-                
+
                 # Check for liquidations first
                 liquidated = self.portfolio.check_liquidation({row['symbol']: row['close']})
-                
+
                 # Execute strategy logic
                 strategy.on_data(row)
-                
+
             return ExecutionResults(success=True, error=None)
-            
+
         except Exception as e:
             return ExecutionResults(success=False, error=str(e))
-            
+
     def _compile_strategy(self, strategy_code: str) -> type:
         # Safely compile and execute user strategy code
         # Apply import restrictions
@@ -461,7 +461,7 @@ class MetricsCalculator:
             <textarea id="strategy-code" placeholder="Enter your strategy code here..."></textarea>
             <!-- Configuration inputs -->
         </section>
-        
+
         <!-- Results Display -->
         <section id="results-section">
             <div id="chart-container"></div>
@@ -482,7 +482,7 @@ class BacktestingApp {
         this.baseUrl = '/api';
         this.currentBacktestId = null;
     }
-    
+
     async submitBacktest() {
         const config = this.getBacktestConfig();
         try {
@@ -498,11 +498,11 @@ class BacktestingApp {
             this.displayError(error);
         }
     }
-    
+
     async pollBacktestStatus() {
         // Poll backtest status and display results when complete
     }
-    
+
     displayResults(results) {
         this.displayChart(results.portfolio_history, results.trades);
         this.displayMetrics(results.metrics);
@@ -566,13 +566,13 @@ tests/
 class SimpleMAStrategy(Strategy):
     def initialize(self):
         self.ma_period = 20
-        
+
     def on_data(self, data):
         # Simple moving average crossover strategy
         if len(self.portfolio.portfolio_history) >= self.ma_period:
             recent_prices = [h['price'] for h in self.portfolio.portfolio_history[-self.ma_period:]]
             ma = sum(recent_prices) / len(recent_prices)
-            
+
             if data['close'] > ma and self.get_position_size() == 0:
                 self.buy(1000, leverage=2.0)  # Buy with 2x leverage
             elif data['close'] < ma and self.get_position_size() > 0:
@@ -611,7 +611,7 @@ class Settings(BaseSettings):
     allowed_timeframes: List[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
     max_leverage: float = 100.0
     default_maintenance_margin_rate: float = 0.005
-    
+
     class Config:
         env_file = ".env"
 ```

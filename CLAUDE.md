@@ -22,19 +22,30 @@ This project uses `uv` for Python package management:
 
 ## Common Commands
 
-As the project develops, common commands will likely include:
-- Add dependencies: `uv add <package>`
-- Add dev dependencies: `uv add --dev <package>`
-- Run in virtual environment: `uv run <command>`
-- Run tests: `uv run pytest` (when tests are added)
-- Format and lint code: `uv run ruff check --fix` (when ruff is added)
+### Development Tools
+- **Lint code**: `uv run ruff check`
+- **Fix linting issues**: `uv run ruff check --fix`
+- **Format code**: `uv run ruff format`
+- **Run tests**: `uv run pytest`
+- **Run tests with coverage**: `uv run pytest --cov`
+- **Run pre-commit on all files**: `uv run pre-commit run --all-files`
+
+### Package Management
+- **Add dependencies**: `uv add <package>`
+- **Add dev dependencies**: `uv add --dev <package>`
+- **Sync dependencies**: `uv sync`
+- **Run any command in venv**: `uv run <command>`
+
+### Project Specific (to be implemented)
+- **Start development server**: `uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000`
+- **Run backtest**: `uv run python -m src.backtesting.cli`
 
 ## Architecture Notes
 
 This project appears to be focused on cryptocurrency trading. As the codebase grows, consider organizing around:
 - Trading strategies
 - Market data handling
-- Portfolio management  
+- Portfolio management
 - Risk management
 - Backtesting framework
 

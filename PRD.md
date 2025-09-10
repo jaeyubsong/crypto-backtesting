@@ -1,6 +1,6 @@
 # Product Requirements Document: Crypto Quant Backtesting Platform
 
-**Version:** 1.0  
+**Version:** 1.0
 **Date:** September 10, 2025
 
 ## 1. Introduction & Vision
