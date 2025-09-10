@@ -240,7 +240,7 @@ class TestPortfolio:
     def test_should_add_position_to_portfolio(self):
         """Test adding a new position to portfolio."""
         portfolio = Portfolio(
-            initial_capital=10000.0, cash=10000.0, positions={}, trades=[], portfolio_history=[]
+            initial_capital=30000.0, cash=30000.0, positions={}, trades=[], portfolio_history=[]
         )
 
         position = Position(
@@ -257,7 +257,7 @@ class TestPortfolio:
 
         assert "BTCUSDT" in portfolio.positions
         assert portfolio.positions["BTCUSDT"] == position
-        assert portfolio.cash == 10000.0 - 25000.0  # Margin deducted
+        assert portfolio.cash == 30000.0 - 25000.0  # Margin deducted
 
     def test_should_close_position_from_portfolio(self):
         """Test closing a position and updating portfolio."""

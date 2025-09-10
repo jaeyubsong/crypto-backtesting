@@ -62,11 +62,31 @@ class Portfolio:
 
     def add_position(self, position: Position) -> None:
         """Add a new position to the portfolio."""
+        # Validate inputs
+        if not isinstance(position, Position):
+            raise ValueError("Position must be a valid Position instance")
+        if not position.symbol or not isinstance(position.symbol, str):
+            raise ValueError("Position symbol must be a non-empty string")
+        if position.leverage <= 0:
+            raise ValueError("Position leverage must be positive")
+        if position.margin_used < 0:
+            raise ValueError("Position margin_used must be non-negative")
+        if position.margin_used > self.cash:
+            raise ValueError(f"Insufficient cash ({self.cash}) for margin requirement ({position.margin_used})")
+
         self.positions[position.symbol] = position
         self.cash -= position.margin_used
 
     def close_position(self, symbol: str, close_price: float, fee: float) -> float:
         """Close a position and return realized PnL."""
+        # Validate inputs
+        if not symbol or not isinstance(symbol, str):
+            raise ValueError("Symbol must be a non-empty string")
+        if close_price <= 0:
+            raise ValueError("Close price must be positive")
+        if fee < 0:
+            raise ValueError("Fee must be non-negative")
+
         if symbol not in self.positions:
             return 0.0
 
