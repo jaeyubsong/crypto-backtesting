@@ -41,7 +41,22 @@ A comprehensive cryptocurrency backtesting platform that enables quantitative tr
 
 The platform requires OHLCV (Open, High, Low, Close, Volume) data in CSV format.
 
-### Converting Binance Trade Data
+### Downloading Binance Data
+
+The platform includes an automated data downloader for Binance futures data:
+
+```bash
+# Download and convert data for date range
+uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-03 --convert --timeframes 1m 5m 1h
+
+# Download single day without conversion
+uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-01
+
+# See all options
+uv run python scripts/download_binance_data.py --help
+```
+
+### Converting Existing Trade Data
 
 If you have raw Binance trade data, use the conversion script:
 
@@ -56,25 +71,36 @@ uv run python scripts/convert_trades_to_ohlcv.py --file BTCUSDT-trades-2025-09-0
 uv run python scripts/convert_trades_to_ohlcv.py --help
 ```
 
-### Expected Data Format
+### Data Structure
 
-Place your OHLCV data in the following structure:
+The platform organizes data in a daily file structure for better performance:
+
 ```
 data/
 ├── binance/
 │   ├── spot/
-│   │   ├── BTCUSDT_1m.csv
-│   │   ├── BTCUSDT_5m.csv
-│   │   └── BTCUSDT_1h.csv
+│   │   └── BTCUSDT/
+│   │       ├── 1m/
+│   │       │   ├── BTCUSDT_1m_2025-01-01.csv
+│   │       │   ├── BTCUSDT_1m_2025-01-02.csv
+│   │       │   └── ...
+│   │       ├── 5m/
+│   │       │   ├── BTCUSDT_5m_2025-01-01.csv
+│   │       │   └── ...
+│   │       └── 1h/
+│   │           └── ...
 │   └── futures/
-│       ├── BTCUSDT_1m.csv
-│       └── ...
+│       └── BTCUSDT/
+│           ├── 1m/
+│           ├── 5m/
+│           └── 1h/
 ```
 
-Each CSV file should have the format:
+Each CSV file contains OHLCV data for a single day:
 ```csv
 timestamp,open,high,low,close,volume
 1609459200000,29000.00,29500.00,28800.00,29200.00,1234.567
+1609459260000,29200.00,29300.00,29100.00,29150.00,987.654
 ```
 
 ## 🚀 Quick Start

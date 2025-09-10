@@ -83,7 +83,33 @@ crypto-trading/
 
 ### 2.1. Market Data Format (CSV)
 
-**File naming convention**: `{SYMBOL}_{TIMEFRAME}.csv`
+**Daily File Structure**: Data is organized in daily files for better performance and memory management.
+
+**Directory Structure**:
+```
+data/binance/{spot|futures}/{SYMBOL}/{TIMEFRAME}/
+```
+
+**File naming convention**: `{SYMBOL}_{TIMEFRAME}_{YYYY-MM-DD}.csv`
+
+**Example Structure**:
+```
+data/
+├── binance/
+│   ├── spot/
+│   │   └── BTCUSDT/
+│   │       ├── 1m/
+│   │       │   ├── BTCUSDT_1m_2025-01-01.csv
+│   │       │   ├── BTCUSDT_1m_2025-01-02.csv
+│   │       │   └── ...
+│   │       ├── 5m/
+│   │       └── 1h/
+│   └── futures/
+│       └── BTCUSDT/
+│           ├── 1m/
+│           ├── 5m/
+│           └── 1h/
+```
 
 **CSV Structure**:
 ```csv
@@ -99,6 +125,12 @@ timestamp,open,high,low,close,volume
 - `low`: Lowest price (float)
 - `close`: Closing price (float)
 - `volume`: Trading volume (float)
+
+**Benefits of Daily Files**:
+- Faster loading for specific date ranges
+- Better memory management for large datasets
+- Easier parallel processing
+- Simplified data management and archiving
 
 ### 2.2. Backtest Results Storage
 
@@ -590,6 +622,12 @@ uv sync
 
 # Run development server
 uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Download and convert Binance data
+uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-03 --convert --timeframes 1m 5m 1h
+
+# Convert existing raw data
+uv run python scripts/convert_trades_to_ohlcv.py --timeframes 1m 5m 1h
 
 # Run tests
 uv run pytest tests/

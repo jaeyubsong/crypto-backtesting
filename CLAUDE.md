@@ -218,7 +218,11 @@ def test_should_[expected_behavior]_when_[condition]():
 ### Project Specific
 - **Start development server**: `uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000`
 - **Run backtest CLI**: `uv run python -m src.backtesting.cli`
-- **Convert trade data to OHLCV**: `uv run python scripts/convert_trades_to_ohlcv.py --timeframes 1m 5m 1h`
+
+### Data Management
+- **Download Binance data**: `uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-03 --convert --timeframes 1m 5m 1h`
+- **Download without conversion**: `uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-01`
+- **Convert existing raw data**: `uv run python scripts/convert_trades_to_ohlcv.py --timeframes 1m 5m 1h`
 - **Convert specific file**: `uv run python scripts/convert_trades_to_ohlcv.py --file BTCUSDT-trades-2025-09-08.csv --timeframes 1m`
 
 ## Architecture Guidelines

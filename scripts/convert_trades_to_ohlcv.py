@@ -30,6 +30,7 @@ class TradeToOHLCVConverter:
     def convert_file(self, file_path: Path, timeframes: list[str]) -> dict[str, str]:
         """
         Convert a single trade file to OHLCV format for specified timeframes.
+        Creates daily files with date in filename.
 
         Args:
             file_path: Path to the raw trade CSV file
@@ -39,7 +40,8 @@ class TradeToOHLCVConverter:
             Dict mapping timeframe to output file path
         """
         symbol = self._extract_symbol_from_filename(file_path.name)
-        logger.info(f"Converting {file_path.name} for symbol {symbol}")
+        date = self._extract_date_from_filename(file_path.name)
+        logger.info(f"Converting {file_path.name} for symbol {symbol} date {date}")
 
         # Read trades data
         trades_df = self._read_trades_file(file_path)
@@ -51,7 +53,11 @@ class TradeToOHLCVConverter:
             logger.info(f"Processing {timeframe} timeframe")
             ohlcv_df = self._aggregate_to_ohlcv(trades_df, timeframe)
 
-            output_file = self.output_dir / f"{symbol}_{timeframe}.csv"
+            # Create symbol/timeframe directory structure
+            symbol_dir = self.output_dir / symbol / timeframe
+            symbol_dir.mkdir(parents=True, exist_ok=True)
+
+            output_file = symbol_dir / f"{symbol}_{timeframe}_{date}.csv"
             self._save_ohlcv(ohlcv_df, output_file)
             output_files[timeframe] = str(output_file)
 
@@ -62,6 +68,19 @@ class TradeToOHLCVConverter:
     def _extract_symbol_from_filename(self, filename: str) -> str:
         """Extract trading symbol from filename like 'BTCUSDT-trades-2025-09-08.csv'"""
         return filename.split("-")[0]
+
+    def _extract_date_from_filename(self, filename: str) -> str:
+        """Extract date from filename like 'BTCUSDT-trades-2025-09-08.csv'"""
+        # Extract YYYY-MM-DD from filename
+        parts = filename.split("-")
+        if len(parts) >= 4:  # ['BTCUSDT', 'trades', 'YYYY', 'MM', 'DD.csv']
+            year = parts[2]
+            month = parts[3]
+            day = parts[4].replace(".csv", "")
+            return f"{year}-{month}-{day}"
+        else:
+            # Fallback for older format files
+            return "unknown-date"
 
     def _read_trades_file(self, file_path: Path) -> pd.DataFrame:
         """Read and validate trades CSV file."""
