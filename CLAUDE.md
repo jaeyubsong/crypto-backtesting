@@ -329,15 +329,278 @@ Before submitting any code, ensure:
 - Separate configs per environment
 - Never commit secrets
 
+## Logging Standards
+
+### Logging Setup with Loguru
+
+**Use `loguru` for all logging:**
+```python
+from loguru import logger
+
+# Remove default handler and add custom configuration
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[correlation_id]}</cyan> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    level="INFO"
+)
+```
+
+### Log Levels
+
+- **TRACE**: Most detailed diagnostic information
+- **DEBUG**: Detailed diagnostic information (development only)
+- **INFO**: General informational messages (key business events)
+- **SUCCESS**: Successful operation completion
+- **WARNING**: Warning messages (recoverable issues)
+- **ERROR**: Error messages (failures that need attention)
+- **CRITICAL**: Critical failures (system-wide issues)
+
+### Structured Logging with Context
+
+**Bind context data to all logs:**
+```python
+# At request start
+logger_with_context = logger.bind(
+    correlation_id=request_id,
+    user_id=user_id,
+    session_id=session_id
+)
+
+# Use throughout request
+logger_with_context.info("Processing backtest",
+    symbol=symbol,
+    timeframe=timeframe
+)
+```
+
+### What to Log
+
+**ALWAYS Log:**
+- API request/response (INFO level)
+- Business transactions start/end
+- External service calls
+- Cache hits/misses
+- Authentication/authorization events
+- Configuration changes
+- Performance metrics exceeding thresholds
+- All errors with full context
+
+**NEVER Log:**
+- Passwords or secrets
+- Personal identifiable information (PII)
+- Full credit card numbers
+- API keys or tokens
+- User strategy code (log hash instead)
+
+### Correlation IDs with Loguru
+
+**Middleware for correlation ID:**
+```python
+from contextvars import ContextVar
+import uuid
+
+correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
+
+@app.middleware("http")
+async def add_correlation_id(request: Request, call_next):
+    correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+    correlation_id_var.set(correlation_id)
+
+    # Bind to logger for this request
+    with logger.contextualize(correlation_id=correlation_id):
+        response = await call_next(request)
+        response.headers["X-Correlation-ID"] = correlation_id
+        return response
+```
+
+### Performance Logging Decorator
+
+**Auto-log slow operations:**
+```python
+from functools import wraps
+import time
+
+def log_performance(threshold_ms: int = 100):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            start = time.time()
+            try:
+                result = await func(*args, **kwargs)
+                elapsed_ms = (time.time() - start) * 1000
+
+                if elapsed_ms > threshold_ms:
+                    logger.warning(
+                        f"Slow operation: {func.__name__}",
+                        duration_ms=elapsed_ms,
+                        threshold_ms=threshold_ms
+                    )
+                else:
+                    logger.debug(
+                        f"Operation completed: {func.__name__}",
+                        duration_ms=elapsed_ms
+                    )
+                return result
+            except Exception as e:
+                elapsed_ms = (time.time() - start) * 1000
+                logger.exception(
+                    f"Operation failed: {func.__name__}",
+                    duration_ms=elapsed_ms
+                )
+                raise
+        return wrapper
+    return decorator
+```
+
+### Error Logging with Loguru
+
+**Automatic exception capture:**
+```python
+@logger.catch(message="Failed to process backtest")
+async def process_backtest(strategy: Strategy) -> Results:
+    # Exceptions automatically logged with full traceback
+    pass
+
+# Manual error logging with context
+try:
+    result = await process_trade(trade)
+except Exception as e:
+    logger.exception(
+        "Trade processing failed",
+        trade_id=trade.id,
+        symbol=trade.symbol,
+        quantity=trade.quantity,
+        side=trade.side
+    )
+    raise
+```
+
+### Log File Rotation
+
+**Configure automatic rotation:**
+```python
+# Rotate log file when it reaches 10MB
+logger.add(
+    "logs/app_{time}.log",
+    rotation="10 MB",
+    retention="30 days",
+    compression="zip",
+    format="{time} | {level} | {extra[correlation_id]} | {message}",
+    serialize=True  # JSON format for log aggregation
+)
+
+# Separate error log
+logger.add(
+    "logs/errors_{time}.log",
+    level="ERROR",
+    rotation="10 MB",
+    retention="90 days",
+    compression="zip"
+)
+
+# Audit log (never delete)
+audit_logger = logger.bind(type="audit")
+audit_logger.add(
+    "logs/audit_{time}.log",
+    filter=lambda record: record["extra"].get("type") == "audit",
+    retention="7 years",
+    serialize=True
+)
+```
+
+### Environment-Specific Configuration
+
+```python
+import os
+from loguru import logger
+
+def configure_logging():
+    logger.remove()  # Remove default handler
+
+    env = os.getenv("ENVIRONMENT", "development")
+
+    if env == "development":
+        # Colorful console output for development
+        logger.add(
+            sys.stderr,
+            format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            level="DEBUG"
+        )
+    elif env == "production":
+        # JSON logs for production
+        logger.add(
+            sys.stdout,
+            format="{message}",
+            level="INFO",
+            serialize=True
+        )
+        # Also write to file
+        logger.add(
+            "logs/app.log",
+            rotation="100 MB",
+            retention="30 days",
+            compression="zip",
+            serialize=True
+        )
+```
+
+### Testing with Loguru
+
+**Capture logs in tests:**
+```python
+import pytest
+from loguru import logger
+
+@pytest.fixture
+def caplog(caplog):
+    """Make pytest caplog work with loguru"""
+    handler_id = logger.add(caplog.handler, format="{message}")
+    yield caplog
+    logger.remove(handler_id)
+
+def test_something_logs_correctly(caplog):
+    my_function()
+    assert "Expected message" in caplog.text
+    assert caplog.records[0].levelname == "INFO"
+```
+
+### Log Message Best Practices
+
+```python
+# Good: Structured, searchable, with context
+logger.info("Backtest completed successfully",
+    backtest_id=backtest_id,
+    duration_seconds=duration,
+    total_trades=len(trades),
+    final_portfolio_value=portfolio.value
+)
+
+# Bad: Unstructured string concatenation
+logger.info(f"Backtest {backtest_id} done in {duration}s with {len(trades)} trades")
+
+# Good: Use success level for positive outcomes
+logger.success("Strategy validation passed", strategy_hash=strategy_hash)
+
+# Good: Include enough context to debug without looking at code
+logger.error("Order execution failed",
+    order_type=order.type,
+    symbol=order.symbol,
+    quantity=order.quantity,
+    reason=str(e),
+    available_balance=portfolio.cash,
+    required_margin=required_margin
+)
+```
+
 ## Suggested Additional Rules
 
 Would you like me to add any of these?
 
-1. **Logging Standards**: Structured logging with correlation IDs
-2. **API Versioning**: Start with /api/v1/ prefix
-3. **Feature Flags**: For gradual feature rollout
-4. **Rate Limiting**: API request limits
-5. **Caching Strategy**: TTL and invalidation rules
-6. **Database Migration**: Alembic setup when needed
-7. **Monitoring**: OpenTelemetry instrumentation
-8. **CI/CD Pipeline**: GitHub Actions configuration
+1. **API Versioning**: Start with /api/v1/ prefix
+2. **Feature Flags**: For gradual feature rollout
+3. **Rate Limiting**: API request limits
+4. **Caching Strategy**: TTL and invalidation rules
+5. **Database Migration**: Alembic setup when needed
+6. **Monitoring**: OpenTelemetry instrumentation
+7. **CI/CD Pipeline**: GitHub Actions configuration
