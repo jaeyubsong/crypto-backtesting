@@ -6,12 +6,14 @@ To be implemented in Phase 2.
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.core.enums import Symbol
+
 
 @dataclass
 class Position:
     """Represents a trading position."""
 
-    symbol: str
+    symbol: Symbol
     size: float
     entry_price: float
     leverage: float
@@ -58,7 +60,7 @@ class Trade:
     """Represents an executed trade."""
 
     timestamp: datetime
-    symbol: str
+    symbol: Symbol
     action: str
     quantity: float
     price: float

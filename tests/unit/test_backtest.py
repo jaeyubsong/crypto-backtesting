@@ -5,6 +5,7 @@ Following TDD approach - write failing tests first.
 
 from datetime import UTC, datetime
 
+from src.core.enums import Symbol, Timeframe, TradingMode
 from src.core.models.backtest import BacktestConfig, BacktestResults
 from src.core.models.position import Trade
 
@@ -18,22 +19,22 @@ class TestBacktestConfig:
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
 
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=start_date,
             end_date=end_date,
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
 
-        assert config.symbol == "BTCUSDT"
-        assert config.timeframe == "1h"
+        assert config.symbol == Symbol.BTC
+        assert config.timeframe == Timeframe.H1
         assert config.start_date == start_date
         assert config.end_date == end_date
         assert config.initial_capital == 10000.0
-        assert config.trading_mode == "futures"
+        assert config.trading_mode == TradingMode.FUTURES
         assert config.max_leverage == 10.0
         assert config.maintenance_margin_rate == 0.005
 
@@ -43,12 +44,12 @@ class TestBacktestConfig:
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
 
         config = BacktestConfig(
-            symbol="ETHUSDT",
-            timeframe="5m",
+            symbol=Symbol.ETH,
+            timeframe=Timeframe.M5,
             start_date=start_date,
             end_date=end_date,
             initial_capital=5000.0,
-            trading_mode="spot",
+            trading_mode=TradingMode.SPOT,
             max_leverage=1.0,
             maintenance_margin_rate=0.0,
         )
@@ -62,12 +63,12 @@ class TestBacktestConfig:
         end_date = datetime(2025, 1, 1, tzinfo=UTC)  # End before start
 
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=start_date,
             end_date=end_date,
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=5.0,
             maintenance_margin_rate=0.005,
         )
@@ -77,12 +78,12 @@ class TestBacktestConfig:
     def test_should_validate_trading_parameters(self):
         """Test validation of trading parameters."""
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=50.0,
             maintenance_margin_rate=0.01,
         )
@@ -100,7 +101,7 @@ class TestBacktestConfig:
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=150.0,  # Too high
             maintenance_margin_rate=0.005,
         )
@@ -114,7 +115,7 @@ class TestBacktestConfig:
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=-1000.0,  # Negative
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
@@ -127,22 +128,22 @@ class TestBacktestConfig:
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
 
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=start_date,
             end_date=end_date,
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
 
         config_dict = config.to_dict()
 
-        assert config_dict["symbol"] == "BTCUSDT"
-        assert config_dict["timeframe"] == "1h"
+        assert config_dict["symbol"] == Symbol.BTC.value
+        assert config_dict["timeframe"] == Timeframe.H1.value
         assert config_dict["initial_capital"] == 10000.0
-        assert config_dict["trading_mode"] == "futures"
+        assert config_dict["trading_mode"] == TradingMode.FUTURES.value
 
 
 class TestBacktestResults:
@@ -154,19 +155,19 @@ class TestBacktestResults:
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
 
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=start_date,
             end_date=end_date,
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
 
         trade = Trade(
             timestamp=datetime.now(UTC),
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             action="sell",
             quantity=1.0,
             price=52000.0,
@@ -209,12 +210,12 @@ class TestBacktestResults:
     def test_should_create_failed_backtest_results(self):
         """Test creation of failed backtest results."""
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
@@ -237,12 +238,12 @@ class TestBacktestResults:
     def test_should_calculate_performance_summary(self):
         """Test performance summary calculation."""
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
@@ -279,12 +280,12 @@ class TestBacktestResults:
     def test_should_check_if_profitable(self):
         """Test profitability check."""
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )
@@ -320,12 +321,12 @@ class TestBacktestResults:
     def test_should_convert_to_dict(self):
         """Test conversion of results to dictionary."""
         config = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
-            trading_mode="futures",
+            trading_mode=TradingMode.FUTURES,
             max_leverage=10.0,
             maintenance_margin_rate=0.005,
         )

@@ -5,6 +5,7 @@ Following TDD approach - write failing tests first.
 
 from datetime import UTC, datetime
 
+from src.core.enums import Symbol
 from src.core.models.position import Position, Trade
 
 
@@ -15,7 +16,7 @@ class TestPosition:
         """Test creation of long position with positive size."""
         timestamp = datetime.now(UTC)
         position = Position(
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             size=1.5,
             entry_price=50000.0,
             leverage=2.0,
@@ -24,7 +25,7 @@ class TestPosition:
             margin_used=37500.0,  # 1.5 * 50000 / 2
         )
 
-        assert position.symbol == "BTCUSDT"
+        assert position.symbol == Symbol.BTC
         assert position.size == 1.5
         assert position.entry_price == 50000.0
         assert position.leverage == 2.0
@@ -36,7 +37,7 @@ class TestPosition:
         """Test creation of short position with negative size."""
         timestamp = datetime.now(UTC)
         position = Position(
-            symbol="ETHUSDT",
+            symbol=Symbol.ETH,
             size=-2.0,
             entry_price=3000.0,
             leverage=3.0,
@@ -45,7 +46,7 @@ class TestPosition:
             margin_used=2000.0,  # abs(-2.0 * 3000) / 3
         )
 
-        assert position.symbol == "ETHUSDT"
+        assert position.symbol == Symbol.ETH
         assert position.size == -2.0
         assert position.entry_price == 3000.0
         assert position.leverage == 3.0
@@ -55,7 +56,7 @@ class TestPosition:
     def test_should_calculate_unrealized_pnl_for_long_position(self):
         """Test unrealized PnL calculation for long position."""
         position = Position(
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             size=1.0,
             entry_price=50000.0,
             leverage=2.0,
@@ -75,7 +76,7 @@ class TestPosition:
     def test_should_calculate_unrealized_pnl_for_short_position(self):
         """Test unrealized PnL calculation for short position."""
         position = Position(
-            symbol="ETHUSDT",
+            symbol=Symbol.ETH,
             size=-1.0,
             entry_price=3000.0,
             leverage=3.0,
@@ -95,7 +96,7 @@ class TestPosition:
     def test_should_detect_liquidation_risk_for_long_position(self):
         """Test liquidation risk detection for long position."""
         position = Position(
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             size=1.0,
             entry_price=50000.0,
             leverage=10.0,  # High leverage
@@ -117,7 +118,7 @@ class TestPosition:
     def test_should_detect_liquidation_risk_for_short_position(self):
         """Test liquidation risk detection for short position."""
         position = Position(
-            symbol="ETHUSDT",
+            symbol=Symbol.ETH,
             size=-1.0,
             entry_price=3000.0,
             leverage=5.0,
@@ -140,7 +141,7 @@ class TestPosition:
     def test_should_calculate_position_value_correctly(self):
         """Test position value calculation at different prices."""
         position = Position(
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             size=2.0,
             entry_price=50000.0,
             leverage=1.0,  # No leverage for simplicity
@@ -156,7 +157,7 @@ class TestPosition:
     def test_should_handle_zero_size_position(self):
         """Test handling of zero size position (no position)."""
         position = Position(
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             size=0.0,
             entry_price=50000.0,
             leverage=1.0,
@@ -177,7 +178,7 @@ class TestTrade:
         timestamp = datetime.now(UTC)
         trade = Trade(
             timestamp=timestamp,
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             action="buy",
             quantity=1.0,
             price=50000.0,
@@ -189,7 +190,7 @@ class TestTrade:
         )
 
         assert trade.timestamp == timestamp
-        assert trade.symbol == "BTCUSDT"
+        assert trade.symbol == Symbol.BTC
         assert trade.action == "buy"
         assert trade.quantity == 1.0
         assert trade.price == 50000.0
@@ -204,7 +205,7 @@ class TestTrade:
         timestamp = datetime.now(UTC)
         trade = Trade(
             timestamp=timestamp,
-            symbol="ETHUSDT",
+            symbol=Symbol.ETH,
             action="sell",
             quantity=2.0,
             price=3200.0,
@@ -224,7 +225,7 @@ class TestTrade:
         timestamp = datetime.now(UTC)
         trade = Trade(
             timestamp=timestamp,
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             action="liquidation",
             quantity=1.0,
             price=45000.0,
@@ -243,7 +244,7 @@ class TestTrade:
         """Test notional value calculation."""
         trade = Trade(
             timestamp=datetime.now(UTC),
-            symbol="BTCUSDT",
+            symbol=Symbol.BTC,
             action="buy",
             quantity=1.5,
             price=50000.0,

@@ -6,6 +6,8 @@ To be implemented in Phase 2.
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.core.enums import Symbol, Timeframe, TradingMode
+
 from .position import Trade
 
 
@@ -13,12 +15,12 @@ from .position import Trade
 class BacktestConfig:
     """Configuration for a backtest execution."""
 
-    symbol: str
-    timeframe: str
+    symbol: Symbol
+    timeframe: Timeframe
     start_date: datetime
     end_date: datetime
     initial_capital: float
-    trading_mode: str
+    trading_mode: TradingMode
     max_leverage: float
     maintenance_margin_rate: float
 
@@ -32,7 +34,7 @@ class BacktestConfig:
 
     def is_valid_leverage(self) -> bool:
         """Validate leverage is within reasonable bounds."""
-        return 1.0 <= self.max_leverage <= 100.0
+        return TradingMode.validate_leverage(self.trading_mode, self.max_leverage)
 
     def is_valid_capital(self) -> bool:
         """Validate initial capital is positive."""
@@ -45,12 +47,12 @@ class BacktestConfig:
     def to_dict(self) -> dict:
         """Convert config to dictionary."""
         return {
-            "symbol": self.symbol,
-            "timeframe": self.timeframe,
+            "symbol": self.symbol.value,
+            "timeframe": self.timeframe.value,
             "start_date": self.start_date.isoformat(),
             "end_date": self.end_date.isoformat(),
             "initial_capital": self.initial_capital,
-            "trading_mode": self.trading_mode,
+            "trading_mode": self.trading_mode.value,
             "max_leverage": self.max_leverage,
             "maintenance_margin_rate": self.maintenance_margin_rate,
         }
