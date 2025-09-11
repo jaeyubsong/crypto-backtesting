@@ -5,7 +5,10 @@ Following TDD approach - write failing tests first.
 
 from datetime import UTC, datetime
 
-from src.core.enums import Symbol
+import pytest
+
+from src.core.enums import ActionType, PositionType, Symbol
+from src.core.exceptions.backtest import ValidationError
 from src.core.models.position import Position, Trade
 
 
@@ -21,7 +24,7 @@ class TestPosition:
             entry_price=50000.0,
             leverage=2.0,
             timestamp=timestamp,
-            position_type="long",
+            position_type=PositionType.LONG,
             margin_used=37500.0,  # 1.5 * 50000 / 2
         )
 
@@ -30,7 +33,7 @@ class TestPosition:
         assert position.entry_price == 50000.0
         assert position.leverage == 2.0
         assert position.timestamp == timestamp
-        assert position.position_type == "long"
+        assert position.position_type == PositionType.LONG
         assert position.margin_used == 37500.0
 
     def test_should_create_short_position_when_size_negative(self):
@@ -42,7 +45,7 @@ class TestPosition:
             entry_price=3000.0,
             leverage=3.0,
             timestamp=timestamp,
-            position_type="short",
+            position_type=PositionType.SHORT,
             margin_used=2000.0,  # abs(-2.0 * 3000) / 3
         )
 
@@ -50,7 +53,7 @@ class TestPosition:
         assert position.size == -2.0
         assert position.entry_price == 3000.0
         assert position.leverage == 3.0
-        assert position.position_type == "short"
+        assert position.position_type == PositionType.SHORT
         assert position.margin_used == 2000.0
 
     def test_should_calculate_unrealized_pnl_for_long_position(self):
@@ -61,7 +64,7 @@ class TestPosition:
             entry_price=50000.0,
             leverage=2.0,
             timestamp=datetime.now(UTC),
-            position_type="long",
+            position_type=PositionType.LONG,
             margin_used=25000.0,
         )
 
@@ -81,7 +84,7 @@ class TestPosition:
             entry_price=3000.0,
             leverage=3.0,
             timestamp=datetime.now(UTC),
-            position_type="short",
+            position_type=PositionType.SHORT,
             margin_used=1000.0,
         )
 
@@ -101,7 +104,7 @@ class TestPosition:
             entry_price=50000.0,
             leverage=10.0,  # High leverage
             timestamp=datetime.now(UTC),
-            position_type="long",
+            position_type=PositionType.LONG,
             margin_used=5000.0,  # 50000 / 10
         )
 
@@ -123,7 +126,7 @@ class TestPosition:
             entry_price=3000.0,
             leverage=5.0,
             timestamp=datetime.now(UTC),
-            position_type="short",
+            position_type=PositionType.SHORT,
             margin_used=600.0,  # 3000 / 5
         )
 
@@ -146,7 +149,7 @@ class TestPosition:
             entry_price=50000.0,
             leverage=1.0,  # No leverage for simplicity
             timestamp=datetime.now(UTC),
-            position_type="long",
+            position_type=PositionType.LONG,
             margin_used=100000.0,
         )
 
@@ -162,7 +165,7 @@ class TestPosition:
             entry_price=50000.0,
             leverage=1.0,
             timestamp=datetime.now(UTC),
-            position_type="long",
+            position_type=PositionType.LONG,
             margin_used=0.0,
         )
 
@@ -179,24 +182,24 @@ class TestTrade:
         trade = Trade(
             timestamp=timestamp,
             symbol=Symbol.BTC,
-            action="buy",
+            action=ActionType.BUY,
             quantity=1.0,
             price=50000.0,
             leverage=2.0,
             fee=25.0,  # 0.05% of notional
-            position_type="long",
+            position_type=PositionType.LONG,
             pnl=0.0,  # No PnL on opening trade
             margin_used=25000.0,
         )
 
         assert trade.timestamp == timestamp
         assert trade.symbol == Symbol.BTC
-        assert trade.action == "buy"
+        assert trade.action == ActionType.BUY
         assert trade.quantity == 1.0
         assert trade.price == 50000.0
         assert trade.leverage == 2.0
         assert trade.fee == 25.0
-        assert trade.position_type == "long"
+        assert trade.position_type == PositionType.LONG
         assert trade.pnl == 0.0
         assert trade.margin_used == 25000.0
 
@@ -206,17 +209,17 @@ class TestTrade:
         trade = Trade(
             timestamp=timestamp,
             symbol=Symbol.ETH,
-            action="sell",
+            action=ActionType.SELL,
             quantity=2.0,
             price=3200.0,
             leverage=1.0,
             fee=6.4,  # 0.1% of notional for spot
-            position_type="long",
+            position_type=PositionType.LONG,
             pnl=400.0,  # Profit from closing position
             margin_used=0.0,  # Closing trade
         )
 
-        assert trade.action == "sell"
+        assert trade.action == ActionType.SELL
         assert trade.pnl == 400.0
         assert trade.margin_used == 0.0
 
@@ -226,17 +229,17 @@ class TestTrade:
         trade = Trade(
             timestamp=timestamp,
             symbol=Symbol.BTC,
-            action="liquidation",
+            action=ActionType.LIQUIDATION,
             quantity=1.0,
             price=45000.0,
             leverage=10.0,
             fee=45.0,  # Higher liquidation fee
-            position_type="long",
+            position_type=PositionType.LONG,
             pnl=-5000.0,  # Loss from liquidation
             margin_used=0.0,  # Position closed
         )
 
-        assert trade.action == "liquidation"
+        assert trade.action == ActionType.LIQUIDATION
         assert trade.pnl < 0  # Liquidation should result in loss
         assert trade.margin_used == 0.0
 
@@ -245,15 +248,73 @@ class TestTrade:
         trade = Trade(
             timestamp=datetime.now(UTC),
             symbol=Symbol.BTC,
-            action="buy",
+            action=ActionType.BUY,
             quantity=1.5,
             price=50000.0,
             leverage=2.0,
             fee=37.5,
-            position_type="long",
+            position_type=PositionType.LONG,
             pnl=0.0,
             margin_used=37500.0,
         )
 
         notional_value = trade.notional_value()
         assert notional_value == 75000.0  # 1.5 * 50000
+
+    def test_should_validate_position_inputs(self):
+        """Test that Position validates inputs correctly."""
+        # Invalid entry price
+        with pytest.raises(ValidationError, match="Entry price must be positive"):
+            Position(
+                symbol=Symbol.BTC,
+                size=1.0,
+                entry_price=-50000.0,  # Invalid
+                leverage=2.0,
+                timestamp=datetime.now(UTC),
+                position_type=PositionType.LONG,
+                margin_used=25000.0,
+            )
+
+        # Invalid leverage
+        with pytest.raises(ValidationError, match="Leverage must be positive"):
+            Position(
+                symbol=Symbol.BTC,
+                size=1.0,
+                entry_price=50000.0,
+                leverage=0.0,  # Invalid
+                timestamp=datetime.now(UTC),
+                position_type=PositionType.LONG,
+                margin_used=25000.0,
+            )
+
+    def test_should_validate_trade_inputs(self):
+        """Test that Trade validates inputs correctly."""
+        # Invalid quantity
+        with pytest.raises(ValidationError, match="Quantity must be positive"):
+            Trade(
+                timestamp=datetime.now(UTC),
+                symbol=Symbol.BTC,
+                action=ActionType.BUY,
+                quantity=0.0,  # Invalid
+                price=50000.0,
+                leverage=2.0,
+                fee=25.0,
+                position_type=PositionType.LONG,
+                pnl=0.0,
+                margin_used=25000.0,
+            )
+
+        # Invalid price
+        with pytest.raises(ValidationError, match="Price must be positive"):
+            Trade(
+                timestamp=datetime.now(UTC),
+                symbol=Symbol.BTC,
+                action=ActionType.BUY,
+                quantity=1.0,
+                price=-50000.0,  # Invalid
+                leverage=2.0,
+                fee=25.0,
+                position_type=PositionType.LONG,
+                pnl=0.0,
+                margin_used=25000.0,
+            )
