@@ -4,19 +4,21 @@ To be implemented in Phase 2.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 
-from src.core.enums import Symbol
+from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import (
     InsufficientFundsError,
     PositionNotFoundError,
     ValidationError,
 )
+from src.core.interfaces.portfolio import IPortfolio
 
 from .position import Position, Trade
 
 
 @dataclass
-class Portfolio:
+class Portfolio(IPortfolio):
     """Portfolio domain model."""
 
     initial_capital: float
@@ -24,15 +26,24 @@ class Portfolio:
     positions: dict[Symbol, Position]
     trades: list[Trade]
     portfolio_history: list[dict]
+    trading_mode: TradingMode
 
     def calculate_portfolio_value(self, current_prices: dict[Symbol, float]) -> float:
-        """Calculate total portfolio value including positions and unrealized PnL."""
-        total_value = self.cash
-        for symbol, position in self.positions.items():
-            if symbol in current_prices:
-                # Add position value plus unrealized PnL
-                total_value += position.position_value(current_prices[symbol])
-        return total_value
+        """Calculate total portfolio value based on trading mode.
+
+        - FUTURES: Portfolio Value = Equity = Cash + Unrealized PnL
+        - SPOT/MARGIN: Portfolio Value = Cash + Asset Values
+        """
+        if self.trading_mode == TradingMode.FUTURES:
+            # For futures: equity = cash + unrealized PnL
+            return self.cash + self.unrealized_pnl(current_prices)
+        else:
+            # For spot/margin: add actual position values
+            total_value = self.cash
+            for symbol, position in self.positions.items():
+                if symbol in current_prices:
+                    total_value += position.position_value(current_prices[symbol])
+            return total_value
 
     def available_margin(self) -> float:
         """Calculate available margin for new positions."""
@@ -92,8 +103,11 @@ class Portfolio:
         self.positions[position.symbol] = position
         self.cash -= position.margin_used
 
-    def close_position(self, symbol: Symbol, close_price: float, fee: float) -> float:
-        """Close a position and return realized PnL."""
+    def close_position_at_price(self, symbol: Symbol, close_price: float, fee: float) -> float:
+        """Close a position at a specific price and return realized PnL.
+
+        This is the original method for closing with known price.
+        """
         # Validate inputs
         if not symbol or not isinstance(symbol, Symbol):
             raise ValidationError("Symbol must be a valid Symbol enum")
@@ -116,3 +130,248 @@ class Portfolio:
         del self.positions[symbol]
 
         return realized_pnl
+
+    def buy(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
+        """Execute a buy order.
+
+        - For SPOT: Buy asset (open long position)
+        - For FUTURES: Open long or close short position
+        """
+        if price <= 0 or amount <= 0:
+            return False
+
+        # Calculate margin needed
+        notional_value = amount * price
+        margin_needed = notional_value / leverage if leverage > 0 else notional_value
+
+        # Check if we have enough cash
+        if margin_needed > self.cash:
+            return False
+
+        # Check for existing position
+        if symbol in self.positions:
+            existing = self.positions[symbol]
+            if existing.position_type == PositionType.SHORT:
+                # Closing short position
+                close_price = price
+                fee = notional_value * 0.001  # 0.1% fee
+                self.close_position_at_price(symbol, close_price, fee)
+                # Record trade
+                trade = Trade(
+                    timestamp=datetime.now(),
+                    symbol=symbol,
+                    action=ActionType.BUY,
+                    quantity=amount,
+                    price=price,
+                    leverage=leverage,
+                    fee=fee,
+                    position_type=PositionType.SHORT,
+                    pnl=existing.unrealized_pnl(price) - fee,
+                    margin_used=0,
+                )
+                self.trades.append(trade)
+            else:
+                # Add to existing long position
+                # Calculate new average entry price
+                total_size = existing.size + amount
+                total_value = (existing.size * existing.entry_price) + (amount * price)
+                new_entry_price = total_value / total_size
+
+                # Update position
+                existing.size = total_size
+                existing.entry_price = new_entry_price
+                existing.margin_used += margin_needed
+                self.cash -= margin_needed
+        else:
+            # Open new long position
+            position = Position(
+                symbol=symbol,
+                size=amount,
+                entry_price=price,
+                leverage=leverage,
+                timestamp=datetime.now(),
+                position_type=PositionType.LONG,
+                margin_used=margin_needed,
+            )
+            self.add_position(position)
+
+            # Record trade
+            trade = Trade(
+                timestamp=datetime.now(),
+                symbol=symbol,
+                action=ActionType.BUY,
+                quantity=amount,
+                price=price,
+                leverage=leverage,
+                fee=notional_value * 0.001,  # 0.1% fee
+                position_type=PositionType.LONG,
+                pnl=0,
+                margin_used=margin_needed,
+            )
+            self.trades.append(trade)
+
+        return True
+
+    def sell(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
+        """Execute a sell order.
+
+        - For SPOT: Sell asset (close long position)
+        - For FUTURES: Open short or close long position
+        """
+        if price <= 0 or amount <= 0:
+            return False
+
+        # Calculate margin needed for short position
+        notional_value = amount * price
+        margin_needed = notional_value / leverage if leverage > 0 else notional_value
+
+        # Check for existing position
+        if symbol in self.positions:
+            existing = self.positions[symbol]
+            if existing.position_type == PositionType.LONG:
+                # Closing long position
+                if self.trading_mode == TradingMode.SPOT and amount > existing.size:
+                    # For spot, can only sell what we have
+                    return False
+
+                close_price = price
+                fee = notional_value * 0.001  # 0.1% fee
+
+                if amount >= existing.size:
+                    # Close entire position
+                    self.close_position_at_price(symbol, close_price, fee)
+                else:
+                    # Partial close
+                    partial_pnl = (close_price - existing.entry_price) * amount - fee
+                    partial_margin = existing.margin_used * (amount / existing.size)
+
+                    existing.size -= amount
+                    existing.margin_used -= partial_margin
+                    self.cash += partial_margin + partial_pnl
+
+                # Record trade
+                trade = Trade(
+                    timestamp=datetime.now(),
+                    symbol=symbol,
+                    action=ActionType.SELL,
+                    quantity=amount,
+                    price=price,
+                    leverage=leverage,
+                    fee=fee,
+                    position_type=PositionType.LONG,
+                    pnl=existing.unrealized_pnl(price) * (amount / existing.size) - fee,
+                    margin_used=0,
+                )
+                self.trades.append(trade)
+            else:
+                # Add to existing short position (futures only)
+                if self.trading_mode == TradingMode.SPOT:
+                    return False  # Can't short in spot trading
+
+                if margin_needed > self.cash:
+                    return False
+
+                # Calculate new average entry price
+                total_size = existing.size + amount
+                total_value = (existing.size * existing.entry_price) + (amount * price)
+                new_entry_price = total_value / total_size
+
+                # Update position
+                existing.size = total_size
+                existing.entry_price = new_entry_price
+                existing.margin_used += margin_needed
+                self.cash -= margin_needed
+        else:
+            # Open new short position (futures only)
+            if self.trading_mode == TradingMode.SPOT:
+                return False  # Can't open short in spot
+
+            if margin_needed > self.cash:
+                return False
+
+            position = Position(
+                symbol=symbol,
+                size=amount,
+                entry_price=price,
+                leverage=leverage,
+                timestamp=datetime.now(),
+                position_type=PositionType.SHORT,
+                margin_used=margin_needed,
+            )
+            self.add_position(position)
+
+            # Record trade
+            trade = Trade(
+                timestamp=datetime.now(),
+                symbol=symbol,
+                action=ActionType.SELL,
+                quantity=amount,
+                price=price,
+                leverage=leverage,
+                fee=notional_value * 0.001,  # 0.1% fee
+                position_type=PositionType.SHORT,
+                pnl=0,
+                margin_used=margin_needed,
+            )
+            self.trades.append(trade)
+
+        return True
+
+    def close_position(self, symbol: Symbol, percentage: float = 100.0) -> bool:
+        """Close a position (partially or fully).
+
+        Args:
+            symbol: Symbol to close
+            percentage: Percentage of position to close (0-100)
+        """
+        if symbol not in self.positions:
+            return False
+
+        if percentage <= 0 or percentage > 100:
+            return False
+
+        position = self.positions[symbol]
+        close_amount = position.size * (percentage / 100.0)
+
+        # Estimate current price (would come from market data in real implementation)
+        # For now, use entry price as placeholder
+        close_price = position.entry_price
+        fee = close_amount * close_price * 0.001  # 0.1% fee
+
+        if percentage >= 100:
+            # Full close
+            self.close_position_at_price(symbol, close_price, fee)
+        else:
+            # Partial close
+            partial_pnl = position.unrealized_pnl(close_price) * (percentage / 100.0) - fee
+            partial_margin = position.margin_used * (percentage / 100.0)
+
+            position.size *= 1 - percentage / 100.0
+            position.margin_used *= 1 - percentage / 100.0
+            self.cash += partial_margin + partial_pnl
+
+        return True
+
+    def check_liquidation(
+        self, current_prices: dict[Symbol, float], maintenance_margin_rate: float = 0.05
+    ) -> list[Symbol]:
+        """Check and return symbols at risk of liquidation.
+
+        Args:
+            current_prices: Current market prices
+            maintenance_margin_rate: Maintenance margin requirement (default 5%)
+
+        Returns:
+            List of symbols that should be liquidated
+        """
+        at_risk_symbols = []
+
+        for symbol, position in self.positions.items():
+            if symbol not in current_prices:
+                continue
+
+            # Check if position is at liquidation risk
+            if position.is_liquidation_risk(current_prices[symbol], maintenance_margin_rate):
+                at_risk_symbols.append(symbol)
+
+        return at_risk_symbols

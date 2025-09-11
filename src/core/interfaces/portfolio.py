@@ -5,27 +5,29 @@ To be implemented in Phase 4.
 
 from abc import ABC, abstractmethod
 
+from src.core.enums import Symbol
+
 
 class IPortfolio(ABC):
     """Abstract interface for portfolio management."""
 
     @abstractmethod
-    def buy(self, symbol: str, amount: float, price: float, leverage: float = 1.0) -> bool:
+    def buy(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
         """Execute a buy order."""
         pass
 
     @abstractmethod
-    def sell(self, symbol: str, amount: float, price: float, leverage: float = 1.0) -> bool:
+    def sell(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
         """Execute a sell order."""
         pass
 
     @abstractmethod
-    def close_position(self, symbol: str, percentage: float = 100.0) -> bool:
+    def close_position(self, symbol: Symbol, percentage: float = 100.0) -> bool:
         """Close a position."""
         pass
 
     @abstractmethod
-    def calculate_portfolio_value(self, current_prices: dict[str, float]) -> float:
+    def calculate_portfolio_value(self, current_prices: dict[Symbol, float]) -> float:
         """Calculate total portfolio value."""
         pass
 
@@ -40,8 +42,13 @@ class IPortfolio(ABC):
         pass
 
     @abstractmethod
-    def margin_ratio(self, current_prices: dict[str, float]) -> float:
+    def margin_ratio(self, current_prices: dict[Symbol, float]) -> float:
         """Calculate margin ratio."""
+        pass
+
+    @abstractmethod
+    def check_liquidation(self, current_prices: dict[Symbol, float]) -> list[Symbol]:
+        """Check and return symbols at risk of liquidation."""
         pass
 
 
