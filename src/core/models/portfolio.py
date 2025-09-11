@@ -6,6 +6,12 @@ To be implemented in Phase 2.
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.core.constants import (
+    MAX_POSITIONS_PER_PORTFOLIO,
+    MAX_TRADE_SIZE,
+    MAX_TRADES_HISTORY,
+    MIN_TRADE_SIZE,
+)
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import (
     InsufficientFundsError,
@@ -13,6 +19,11 @@ from src.core.exceptions.backtest import (
     ValidationError,
 )
 from src.core.interfaces.portfolio import IPortfolio
+from src.core.utils.validation import (
+    validate_percentage,
+    validate_positive,
+    validate_symbol,
+)
 
 from .position import Position, Trade
 
@@ -86,6 +97,12 @@ class Portfolio(IPortfolio):
 
     def add_position(self, position: Position) -> None:
         """Add a new position to the portfolio."""
+        # Check position limit
+        if len(self.positions) >= MAX_POSITIONS_PER_PORTFOLIO:
+            raise ValidationError(
+                f"Maximum positions limit reached ({MAX_POSITIONS_PER_PORTFOLIO})"
+            )
+
         # Validate inputs
         if not isinstance(position, Position):
             raise ValidationError("Position must be a valid Position instance")
@@ -137,8 +154,17 @@ class Portfolio(IPortfolio):
         - For SPOT: Buy asset (open long position)
         - For FUTURES: Open long or close short position
         """
-        if price <= 0 or amount <= 0:
-            return False
+        # Validate inputs
+        symbol = validate_symbol(symbol)
+        price = validate_positive(price, "price")
+        amount = validate_positive(amount, "amount")
+        leverage = validate_positive(leverage, "leverage")
+
+        # Check trade size limits
+        if amount < MIN_TRADE_SIZE:
+            raise ValidationError(f"Trade size too small: {amount} < {MIN_TRADE_SIZE}")
+        if amount > MAX_TRADE_SIZE:
+            raise ValidationError(f"Trade size too large: {amount} > {MAX_TRADE_SIZE}")
 
         # Calculate margin needed
         notional_value = amount * price
@@ -146,7 +172,11 @@ class Portfolio(IPortfolio):
 
         # Check if we have enough cash
         if margin_needed > self.cash:
-            return False
+            raise InsufficientFundsError(
+                required=margin_needed,
+                available=self.cash,
+                operation=f"buying {amount} {symbol.value} at {price}",
+            )
 
         # Check for existing position
         if symbol in self.positions:
@@ -170,6 +200,9 @@ class Portfolio(IPortfolio):
                     margin_used=0,
                 )
                 self.trades.append(trade)
+            # Trim trade history if it gets too long
+            if len(self.trades) > MAX_TRADES_HISTORY:
+                self.trades = self.trades[-MAX_TRADES_HISTORY:]
             else:
                 # Add to existing long position
                 # Calculate new average entry price
@@ -209,6 +242,9 @@ class Portfolio(IPortfolio):
                 margin_used=margin_needed,
             )
             self.trades.append(trade)
+            # Trim trade history if it gets too long
+            if len(self.trades) > MAX_TRADES_HISTORY:
+                self.trades = self.trades[-MAX_TRADES_HISTORY:]
 
         return True
 
@@ -218,8 +254,17 @@ class Portfolio(IPortfolio):
         - For SPOT: Sell asset (close long position)
         - For FUTURES: Open short or close long position
         """
-        if price <= 0 or amount <= 0:
-            return False
+        # Validate inputs
+        symbol = validate_symbol(symbol)
+        price = validate_positive(price, "price")
+        amount = validate_positive(amount, "amount")
+        leverage = validate_positive(leverage, "leverage")
+
+        # Check trade size limits
+        if amount < MIN_TRADE_SIZE:
+            raise ValidationError(f"Trade size too small: {amount} < {MIN_TRADE_SIZE}")
+        if amount > MAX_TRADE_SIZE:
+            raise ValidationError(f"Trade size too large: {amount} > {MAX_TRADE_SIZE}")
 
         # Calculate margin needed for short position
         notional_value = amount * price
@@ -263,13 +308,20 @@ class Portfolio(IPortfolio):
                     margin_used=0,
                 )
                 self.trades.append(trade)
+            # Trim trade history if it gets too long
+            if len(self.trades) > MAX_TRADES_HISTORY:
+                self.trades = self.trades[-MAX_TRADES_HISTORY:]
             else:
                 # Add to existing short position (futures only)
                 if self.trading_mode == TradingMode.SPOT:
                     return False  # Can't short in spot trading
 
                 if margin_needed > self.cash:
-                    return False
+                    raise InsufficientFundsError(
+                        required=margin_needed,
+                        available=self.cash,
+                        operation=f"adding to short position {symbol.value}",
+                    )
 
                 # Calculate new average entry price
                 total_size = existing.size + amount
@@ -287,7 +339,11 @@ class Portfolio(IPortfolio):
                 return False  # Can't open short in spot
 
             if margin_needed > self.cash:
-                return False
+                raise InsufficientFundsError(
+                    required=margin_needed,
+                    available=self.cash,
+                    operation=f"opening short position {symbol.value}",
+                )
 
             position = Position(
                 symbol=symbol,
@@ -314,6 +370,9 @@ class Portfolio(IPortfolio):
                 margin_used=margin_needed,
             )
             self.trades.append(trade)
+            # Trim trade history if it gets too long
+            if len(self.trades) > MAX_TRADES_HISTORY:
+                self.trades = self.trades[-MAX_TRADES_HISTORY:]
 
         return True
 
@@ -324,10 +383,11 @@ class Portfolio(IPortfolio):
             symbol: Symbol to close
             percentage: Percentage of position to close (0-100)
         """
-        if symbol not in self.positions:
-            return False
+        # Validate inputs
+        symbol = validate_symbol(symbol)
+        percentage = validate_percentage(percentage)
 
-        if percentage <= 0 or percentage > 100:
+        if symbol not in self.positions:
             return False
 
         position = self.positions[symbol]
