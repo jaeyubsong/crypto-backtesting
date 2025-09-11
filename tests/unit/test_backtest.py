@@ -5,7 +5,7 @@ Following TDD approach - write failing tests first.
 
 from datetime import UTC, datetime
 
-from src.core.enums import Symbol, Timeframe, TradingMode
+from src.core.enums import ActionType, PositionType, Symbol, Timeframe, TradingMode
 from src.core.models.backtest import BacktestConfig, BacktestResults
 from src.core.models.position import Trade
 
@@ -13,7 +13,7 @@ from src.core.models.position import Trade
 class TestBacktestConfig:
     """Test suite for BacktestConfig model."""
 
-    def test_should_create_backtest_config_with_all_parameters(self):
+    def test_should_create_backtest_config_with_all_parameters(self) -> None:
         """Test creation of backtest configuration."""
         start_date = datetime(2025, 1, 1, tzinfo=UTC)
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
@@ -38,7 +38,7 @@ class TestBacktestConfig:
         assert config.max_leverage == 10.0
         assert config.maintenance_margin_rate == 0.005
 
-    def test_should_validate_date_range(self):
+    def test_should_validate_date_range(self) -> None:
         """Test that backtest config validates date range."""
         start_date = datetime(2025, 1, 1, tzinfo=UTC)
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
@@ -57,7 +57,7 @@ class TestBacktestConfig:
         assert config.is_valid_date_range()
         assert config.duration_days() == 30
 
-    def test_should_detect_invalid_date_range(self):
+    def test_should_detect_invalid_date_range(self) -> None:
         """Test detection of invalid date ranges."""
         start_date = datetime(2025, 1, 31, tzinfo=UTC)
         end_date = datetime(2025, 1, 1, tzinfo=UTC)  # End before start
@@ -75,7 +75,7 @@ class TestBacktestConfig:
 
         assert not config.is_valid_date_range()
 
-    def test_should_validate_trading_parameters(self):
+    def test_should_validate_trading_parameters(self) -> None:
         """Test validation of trading parameters."""
         config = BacktestConfig(
             symbol=Symbol.BTC,
@@ -92,7 +92,7 @@ class TestBacktestConfig:
         assert config.is_valid_capital()
         assert config.is_valid_margin_rate()
 
-    def test_should_detect_invalid_trading_parameters(self):
+    def test_should_detect_invalid_trading_parameters(self) -> None:
         """Test detection of invalid trading parameters."""
         # Invalid leverage (too high)
         config_high_leverage = BacktestConfig(
@@ -122,7 +122,7 @@ class TestBacktestConfig:
 
         assert not config_negative_capital.is_valid_capital()
 
-    def test_should_convert_to_dict(self):
+    def test_should_convert_to_dict(self) -> None:
         """Test conversion of config to dictionary."""
         start_date = datetime(2025, 1, 1, tzinfo=UTC)
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
@@ -149,7 +149,7 @@ class TestBacktestConfig:
 class TestBacktestResults:
     """Test suite for BacktestResults model."""
 
-    def test_should_create_successful_backtest_results(self):
+    def test_should_create_successful_backtest_results(self) -> None:
         """Test creation of successful backtest results."""
         start_date = datetime(2025, 1, 1, tzinfo=UTC)
         end_date = datetime(2025, 1, 31, tzinfo=UTC)
@@ -168,12 +168,12 @@ class TestBacktestResults:
         trade = Trade(
             timestamp=datetime.now(UTC),
             symbol=Symbol.BTC,
-            action="sell",
+            action=ActionType.SELL,
             quantity=1.0,
             price=52000.0,
             leverage=2.0,
             fee=26.0,
-            position_type="long",
+            position_type=PositionType.LONG,
             pnl=1974.0,
             margin_used=0.0,
         )
@@ -207,7 +207,7 @@ class TestBacktestResults:
         assert results.status == "completed"
         assert results.error_message is None
 
-    def test_should_create_failed_backtest_results(self):
+    def test_should_create_failed_backtest_results(self) -> None:
         """Test creation of failed backtest results."""
         config = BacktestConfig(
             symbol=Symbol.BTC,
@@ -235,7 +235,7 @@ class TestBacktestResults:
         assert len(results.portfolio_history) == 0
         assert len(results.metrics) == 0
 
-    def test_should_calculate_performance_summary(self):
+    def test_should_calculate_performance_summary(self) -> None:
         """Test performance summary calculation."""
         config = BacktestConfig(
             symbol=Symbol.BTC,
@@ -277,7 +277,7 @@ class TestBacktestResults:
         assert summary["total_return"] == 20.0
         assert summary["duration_days"] == 30
 
-    def test_should_check_if_profitable(self):
+    def test_should_check_if_profitable(self) -> None:
         """Test profitability check."""
         config = BacktestConfig(
             symbol=Symbol.BTC,
@@ -318,7 +318,7 @@ class TestBacktestResults:
 
         assert not loss_results.is_profitable()
 
-    def test_should_convert_to_dict(self):
+    def test_should_convert_to_dict(self) -> None:
         """Test conversion of results to dictionary."""
         config = BacktestConfig(
             symbol=Symbol.BTC,

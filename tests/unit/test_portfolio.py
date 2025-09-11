@@ -19,7 +19,7 @@ from src.core.models.position import Position, Trade
 class TestPortfolioBasics:
     """Basic portfolio functionality tests (mode-agnostic)."""
 
-    def test_should_create_portfolio_with_initial_capital(self):
+    def test_should_create_portfolio_with_initial_capital(self) -> None:
         """Test portfolio creation with initial capital."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -37,7 +37,7 @@ class TestPortfolioBasics:
         assert len(portfolio.portfolio_history) == 0
         assert portfolio.trading_mode == TradingMode.SPOT
 
-    def test_should_calculate_available_margin(self):
+    def test_should_calculate_available_margin(self) -> None:
         """Test available margin calculation."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -51,7 +51,7 @@ class TestPortfolioBasics:
         available_margin = portfolio.available_margin()
         assert available_margin == 5000.0  # All cash is available when no positions
 
-    def test_should_calculate_used_margin_with_positions(self):
+    def test_should_calculate_used_margin_with_positions(self) -> None:
         """Test used margin calculation with open positions."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -85,7 +85,7 @@ class TestPortfolioBasics:
         used_margin = portfolio.used_margin()
         assert used_margin == 35000.0  # 25000 + 10000
 
-    def test_should_calculate_realized_pnl_from_trades(self):
+    def test_should_calculate_realized_pnl_from_trades(self) -> None:
         """Test realized PnL calculation from completed trades."""
         trade1 = Trade(
             timestamp=datetime.now(UTC),
@@ -125,7 +125,7 @@ class TestPortfolioBasics:
         realized_pnl = portfolio.realized_pnl()
         assert realized_pnl == 2459.5  # 1974 + 485.5
 
-    def test_should_add_position_to_portfolio(self):
+    def test_should_add_position_to_portfolio(self) -> None:
         """Test adding a new position to portfolio."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -152,7 +152,7 @@ class TestPortfolioBasics:
         assert portfolio.cash == 5000.0  # 10000 - 5000
         assert portfolio.positions[Symbol.BTC] == btc_position
 
-    def test_should_raise_error_on_insufficient_funds(self):
+    def test_should_raise_error_on_insufficient_funds(self) -> None:
         """Test that insufficient funds error is raised."""
         portfolio = Portfolio(
             initial_capital=1000.0,
@@ -179,7 +179,7 @@ class TestPortfolioBasics:
         assert exc_info.value.required == 25000.0
         assert exc_info.value.available == 1000.0
 
-    def test_should_raise_error_when_closing_nonexistent_position(self):
+    def test_should_raise_error_when_closing_nonexistent_position(self) -> None:
         """Test error when closing position that doesn't exist."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -199,7 +199,7 @@ class TestPortfolioBasics:
 class TestPortfolioSpotMode:
     """Tests specific to SPOT trading mode."""
 
-    def test_should_calculate_portfolio_value_with_no_positions(self):
+    def test_should_calculate_portfolio_value_with_no_positions(self) -> None:
         """Test SPOT portfolio value with no positions (just cash)."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -215,7 +215,7 @@ class TestPortfolioSpotMode:
 
         assert portfolio_value == 10000.0  # Only cash
 
-    def test_should_calculate_portfolio_value_with_positions(self):
+    def test_should_calculate_portfolio_value_with_positions(self) -> None:
         """Test SPOT portfolio value = Cash + Asset Values."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -243,7 +243,7 @@ class TestPortfolioSpotMode:
         # 2000 + (1.0 * 52000) = 2000 + 52000 = 54000
         assert portfolio_value == 54000.0
 
-    def test_should_calculate_portfolio_value_with_multiple_assets(self):
+    def test_should_calculate_portfolio_value_with_multiple_assets(self) -> None:
         """Test SPOT portfolio with multiple assets."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -286,7 +286,7 @@ class TestPortfolioSpotMode:
 class TestPortfolioFuturesMode:
     """Tests specific to FUTURES trading mode."""
 
-    def test_should_calculate_portfolio_value_with_no_positions(self):
+    def test_should_calculate_portfolio_value_with_no_positions(self) -> None:
         """Test FUTURES portfolio value with no positions (just equity)."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -303,7 +303,7 @@ class TestPortfolioFuturesMode:
         # FUTURES with no positions: equity = cash
         assert portfolio_value == 10000.0
 
-    def test_should_calculate_portfolio_value_with_long_position(self):
+    def test_should_calculate_portfolio_value_with_long_position(self) -> None:
         """Test FUTURES portfolio value = Cash + Unrealized PnL."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -332,7 +332,7 @@ class TestPortfolioFuturesMode:
         # Equity = 5200 + 4000 = 9200
         assert portfolio_value == 9200.0
 
-    def test_should_calculate_portfolio_value_with_short_position(self):
+    def test_should_calculate_portfolio_value_with_short_position(self) -> None:
         """Test FUTURES portfolio value with short position."""
         eth_position = Position(
             symbol=Symbol.ETH,
@@ -361,7 +361,7 @@ class TestPortfolioFuturesMode:
         # Equity = 4000 + 2000 = 6000
         assert portfolio_value == 6000.0
 
-    def test_should_calculate_portfolio_value_with_mixed_positions(self):
+    def test_should_calculate_portfolio_value_with_mixed_positions(self) -> None:
         """Test FUTURES portfolio with both long and short positions."""
         btc_long = Position(
             symbol=Symbol.BTC,
@@ -401,7 +401,7 @@ class TestPortfolioFuturesMode:
         # Equity = 7250 + 1000 + 1000 = 9250
         assert portfolio_value == 9250.0
 
-    def test_should_calculate_unrealized_pnl_for_futures_positions(self):
+    def test_should_calculate_unrealized_pnl_for_futures_positions(self) -> None:
         """Test unrealized PnL calculation for futures positions."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -440,7 +440,7 @@ class TestPortfolioFuturesMode:
         # Total: 2000 + 500 = 2500
         assert unrealized_pnl == 2500.0
 
-    def test_should_calculate_margin_ratio_for_futures(self):
+    def test_should_calculate_margin_ratio_for_futures(self) -> None:
         """Test margin ratio calculation in futures mode."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -470,7 +470,7 @@ class TestPortfolioFuturesMode:
         # Ratio = 3000 / 5000 = 0.6
         assert margin_ratio == 0.6
 
-    def test_should_detect_margin_call_risk_in_futures(self):
+    def test_should_detect_margin_call_risk_in_futures(self) -> None:
         """Test margin call detection in futures trading."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -499,7 +499,7 @@ class TestPortfolioFuturesMode:
         danger_prices = {Symbol.BTC: 46000.0}
         assert portfolio.is_margin_call(danger_prices, margin_call_threshold=0.5)
 
-    def test_should_close_futures_position_with_realized_pnl(self):
+    def test_should_close_futures_position_with_realized_pnl(self) -> None:
         """Test closing a futures position and calculating realized PnL."""
         btc_position = Position(
             symbol=Symbol.BTC,

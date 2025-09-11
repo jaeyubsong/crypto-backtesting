@@ -15,7 +15,7 @@ from src.core.models.position import Position, Trade
 class TestPosition:
     """Test suite for Position domain model."""
 
-    def test_should_create_long_position_when_size_positive(self):
+    def test_should_create_long_position_when_size_positive(self) -> None:
         """Test creation of long position with positive size."""
         timestamp = datetime.now(UTC)
         position = Position(
@@ -36,7 +36,7 @@ class TestPosition:
         assert position.position_type == PositionType.LONG
         assert position.margin_used == 37500.0
 
-    def test_should_create_short_position_when_size_negative(self):
+    def test_should_create_short_position_when_size_negative(self) -> None:
         """Test creation of short position with negative size."""
         timestamp = datetime.now(UTC)
         position = Position(
@@ -56,7 +56,7 @@ class TestPosition:
         assert position.position_type == PositionType.SHORT
         assert position.margin_used == 2000.0
 
-    def test_should_calculate_unrealized_pnl_for_long_position(self):
+    def test_should_calculate_unrealized_pnl_for_long_position(self) -> None:
         """Test unrealized PnL calculation for long position."""
         position = Position(
             symbol=Symbol.BTC,
@@ -76,7 +76,7 @@ class TestPosition:
         unrealized_pnl = position.unrealized_pnl(48000.0)
         assert unrealized_pnl == -2000.0  # (48000 - 50000) * 1.0
 
-    def test_should_calculate_unrealized_pnl_for_short_position(self):
+    def test_should_calculate_unrealized_pnl_for_short_position(self) -> None:
         """Test unrealized PnL calculation for short position."""
         position = Position(
             symbol=Symbol.ETH,
@@ -96,7 +96,7 @@ class TestPosition:
         unrealized_pnl = position.unrealized_pnl(3200.0)
         assert unrealized_pnl == -200.0  # (3000 - 3200) * abs(-1.0)
 
-    def test_should_detect_liquidation_risk_for_long_position(self):
+    def test_should_detect_liquidation_risk_for_long_position(self) -> None:
         """Test liquidation risk detection for long position."""
         position = Position(
             symbol=Symbol.BTC,
@@ -118,7 +118,7 @@ class TestPosition:
         # ≈ 50000 * (1 - 0.1 + 0.005) = 50000 * 0.905 = 45250
         assert position.is_liquidation_risk(45000.0, maintenance_margin_rate)
 
-    def test_should_detect_liquidation_risk_for_short_position(self):
+    def test_should_detect_liquidation_risk_for_short_position(self) -> None:
         """Test liquidation risk detection for short position."""
         position = Position(
             symbol=Symbol.ETH,
@@ -141,7 +141,7 @@ class TestPosition:
         # ≈ 3000 * (1 + 0.2 - 0.01) = 3000 * 1.19 = 3570
         assert position.is_liquidation_risk(3600.0, maintenance_margin_rate)
 
-    def test_should_calculate_position_value_correctly(self):
+    def test_should_calculate_position_value_correctly(self) -> None:
         """Test position value calculation at different prices."""
         position = Position(
             symbol=Symbol.BTC,
@@ -157,7 +157,7 @@ class TestPosition:
         current_value = position.position_value(55000.0)
         assert current_value == 110000.0  # 2.0 * 55000
 
-    def test_should_handle_zero_size_position(self):
+    def test_should_handle_zero_size_position(self) -> None:
         """Test handling of zero size position (no position)."""
         position = Position(
             symbol=Symbol.BTC,
@@ -176,7 +176,7 @@ class TestPosition:
 class TestTrade:
     """Test suite for Trade domain model."""
 
-    def test_should_create_buy_trade_correctly(self):
+    def test_should_create_buy_trade_correctly(self) -> None:
         """Test creation of buy trade."""
         timestamp = datetime.now(UTC)
         trade = Trade(
@@ -203,7 +203,7 @@ class TestTrade:
         assert trade.pnl == 0.0
         assert trade.margin_used == 25000.0
 
-    def test_should_create_sell_trade_with_pnl(self):
+    def test_should_create_sell_trade_with_pnl(self) -> None:
         """Test creation of sell trade with realized PnL."""
         timestamp = datetime.now(UTC)
         trade = Trade(
@@ -223,7 +223,7 @@ class TestTrade:
         assert trade.pnl == 400.0
         assert trade.margin_used == 0.0
 
-    def test_should_create_liquidation_trade(self):
+    def test_should_create_liquidation_trade(self) -> None:
         """Test creation of liquidation trade."""
         timestamp = datetime.now(UTC)
         trade = Trade(
@@ -243,7 +243,7 @@ class TestTrade:
         assert trade.pnl < 0  # Liquidation should result in loss
         assert trade.margin_used == 0.0
 
-    def test_should_calculate_notional_value(self):
+    def test_should_calculate_notional_value(self) -> None:
         """Test notional value calculation."""
         trade = Trade(
             timestamp=datetime.now(UTC),
@@ -261,7 +261,7 @@ class TestTrade:
         notional_value = trade.notional_value()
         assert notional_value == 75000.0  # 1.5 * 50000
 
-    def test_should_validate_position_inputs(self):
+    def test_should_validate_position_inputs(self) -> None:
         """Test that Position validates inputs correctly."""
         # Invalid entry price
         with pytest.raises(ValidationError, match="Entry price must be positive"):
@@ -287,7 +287,7 @@ class TestTrade:
                 margin_used=25000.0,
             )
 
-    def test_should_validate_trade_inputs(self):
+    def test_should_validate_trade_inputs(self) -> None:
         """Test that Trade validates inputs correctly."""
         # Invalid quantity
         with pytest.raises(ValidationError, match="Quantity must be positive"):

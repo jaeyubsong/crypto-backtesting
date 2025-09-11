@@ -17,7 +17,7 @@ from src.core.models.position import Position
 class TestPortfolioInputValidation:
     """Test Portfolio input validation."""
 
-    def test_should_reject_string_symbol_in_buy(self):
+    def test_should_reject_string_symbol_in_buy(self) -> None:
         """Test that buy() rejects string symbols."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -32,7 +32,7 @@ class TestPortfolioInputValidation:
         with pytest.raises(TypeError, match="symbol must be Symbol enum"):
             portfolio.buy("BTCUSDT", 1.0, 50000.0)  # type: ignore
 
-    def test_should_reject_negative_price_in_buy(self):
+    def test_should_reject_negative_price_in_buy(self) -> None:
         """Test that buy() rejects negative prices."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -46,7 +46,7 @@ class TestPortfolioInputValidation:
         with pytest.raises(ValidationError, match="price must be positive"):
             portfolio.buy(Symbol.BTC, 1.0, -50000.0)
 
-    def test_should_reject_zero_amount_in_buy(self):
+    def test_should_reject_zero_amount_in_buy(self) -> None:
         """Test that buy() rejects zero amount."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -60,7 +60,7 @@ class TestPortfolioInputValidation:
         with pytest.raises(ValidationError, match="amount must be positive"):
             portfolio.buy(Symbol.BTC, 0, 50000.0)
 
-    def test_should_reject_string_symbol_in_sell(self):
+    def test_should_reject_string_symbol_in_sell(self) -> None:
         """Test that sell() rejects string symbols."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -75,7 +75,7 @@ class TestPortfolioInputValidation:
         with pytest.raises(TypeError, match="symbol must be Symbol enum"):
             portfolio.sell("ETHUSDT", 1.0, 3000.0)  # type: ignore
 
-    def test_should_reject_too_small_trade(self):
+    def test_should_reject_too_small_trade(self) -> None:
         """Test that trades below MIN_TRADE_SIZE are rejected."""
         portfolio = Portfolio(
             initial_capital=10000.0,
@@ -89,7 +89,7 @@ class TestPortfolioInputValidation:
         with pytest.raises(ValidationError, match="Trade size too small"):
             portfolio.buy(Symbol.BTC, 0.0000001, 50000.0)  # Too small
 
-    def test_should_reject_too_large_trade(self):
+    def test_should_reject_too_large_trade(self) -> None:
         """Test that trades above MAX_TRADE_SIZE are rejected."""
         portfolio = Portfolio(
             initial_capital=100000000.0,  # Large capital
@@ -103,7 +103,7 @@ class TestPortfolioInputValidation:
         with pytest.raises(ValidationError, match="Trade size too large"):
             portfolio.buy(Symbol.BTC, 10000000, 50000.0)  # Too large
 
-    def test_should_raise_insufficient_funds_with_context(self):
+    def test_should_raise_insufficient_funds_with_context(self) -> None:
         """Test that InsufficientFundsError includes context."""
         portfolio = Portfolio(
             initial_capital=1000.0,
@@ -127,7 +127,7 @@ class TestPortfolioInputValidation:
 class TestPortfolioResourceLimits:
     """Test Portfolio resource limits."""
 
-    def test_should_respect_max_positions_limit(self):
+    def test_should_respect_max_positions_limit(self) -> None:
         """Test that portfolio respects MAX_POSITIONS_PER_PORTFOLIO."""
         portfolio = Portfolio(
             initial_capital=1000000.0,
@@ -175,10 +175,10 @@ class TestPortfolioResourceLimits:
         assert MAX_POSITIONS_PER_PORTFOLIO >= 10
         assert MAX_POSITIONS_PER_PORTFOLIO <= 1000
 
-    def test_should_enforce_position_limit_on_add(self):
+    def test_should_enforce_position_limit_on_add(self) -> None:
         """Test that add_position enforces the limit."""
         # Create a portfolio with many positions (simulated)
-        positions = {}
+        positions: dict[Symbol, Position] = {}
 
         # Simulate having MAX_POSITIONS_PER_PORTFOLIO positions
         # We'll use the Portfolio with its positions dict pre-populated
@@ -215,7 +215,7 @@ class TestPortfolioResourceLimits:
 class TestPortfolioClosePosition:
     """Test close_position validation."""
 
-    def test_should_reject_invalid_percentage(self):
+    def test_should_reject_invalid_percentage(self) -> None:
         """Test that close_position validates percentage."""
         btc_position = Position(
             symbol=Symbol.BTC,
@@ -246,7 +246,7 @@ class TestPortfolioClosePosition:
         with pytest.raises(ValidationError, match="percentage must be between 0 and 100"):
             portfolio.close_position(Symbol.BTC, -10)  # Negative
 
-    def test_should_reject_string_symbol_in_close_position(self):
+    def test_should_reject_string_symbol_in_close_position(self) -> None:
         """Test that close_position rejects string symbols."""
         portfolio = Portfolio(
             initial_capital=10000.0,

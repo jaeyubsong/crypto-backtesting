@@ -3,6 +3,7 @@ Pydantic schemas for API request/response models.
 """
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -29,7 +30,7 @@ class BacktestRequest(BaseModel):
 
     @field_validator("end_date")
     @classmethod
-    def validate_date_range(cls, v: datetime, info) -> datetime:
+    def validate_date_range(cls, v: datetime, info: Any) -> datetime:
         """Validate that end_date is after start_date."""
         if "start_date" in info.data and v <= info.data["start_date"]:
             raise ValueError("end_date must be after start_date")
@@ -37,7 +38,7 @@ class BacktestRequest(BaseModel):
 
     @field_validator("max_leverage")
     @classmethod
-    def validate_leverage(cls, v: float, info) -> float:
+    def validate_leverage(cls, v: float, info: Any) -> float:
         """Validate leverage based on trading mode."""
         if "trading_mode" in info.data:
             mode = info.data["trading_mode"]

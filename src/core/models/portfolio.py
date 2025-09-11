@@ -134,7 +134,7 @@ class Portfolio(IPortfolio):
             raise ValidationError("Fee must be non-negative")
 
         if symbol not in self.positions:
-            raise PositionNotFoundError(symbol.value)
+            raise PositionNotFoundError(str(symbol))
 
         position = self.positions[symbol]
         unrealized_pnl = position.unrealized_pnl(close_price)
@@ -435,3 +435,91 @@ class Portfolio(IPortfolio):
                 at_risk_symbols.append(symbol)
 
         return at_risk_symbols
+
+    # Strategy API Methods (PRD Section 3.2)
+    def get_position_size(self, symbol: Symbol) -> float:
+        """Get current position size for symbol.
+
+        Returns:
+            Positive for long, negative for short, 0 if no position.
+        """
+        symbol = validate_symbol(symbol)
+        position = self.positions.get(symbol)
+        return position.size if position else 0.0
+
+    def get_cash(self) -> float:
+        """Get available cash/margin.
+
+        Returns:
+            Current cash balance.
+        """
+        return self.cash
+
+    def get_margin_ratio(self) -> float:
+        """Get current margin ratio.
+
+        Returns:
+            Margin usage ratio (0 for spot trading).
+        """
+        # For spot trading, return 0 (no margin used)
+        if self.trading_mode == TradingMode.SPOT:
+            return 0.0
+
+        # For futures/margin, calculate margin usage
+        total_margin = self.used_margin()
+        if total_margin == 0:
+            return 0.0
+        return total_margin / self.initial_capital
+
+    def get_unrealized_pnl(self, symbol: Symbol, current_price: float) -> float:
+        """Get unrealized PnL for a specific position.
+
+        Args:
+            symbol: Trading symbol
+            current_price: Current market price
+
+        Returns:
+            Unrealized PnL (0 if no position).
+        """
+        symbol = validate_symbol(symbol)
+        current_price = validate_positive(current_price, "current_price")
+
+        position = self.positions.get(symbol)
+        return position.unrealized_pnl(current_price) if position else 0.0
+
+    def get_leverage(self, symbol: Symbol) -> float:
+        """Get current leverage for a position.
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            Position leverage (0 if no position).
+        """
+        symbol = validate_symbol(symbol)
+        position = self.positions.get(symbol)
+        return position.leverage if position else 0.0
+
+    def record_snapshot(self, timestamp: datetime, current_prices: dict[Symbol, float]) -> None:
+        """Record portfolio state at given timestamp.
+
+        Args:
+            timestamp: Current timestamp
+            current_prices: Current market prices for all symbols
+        """
+        snapshot = {
+            "timestamp": timestamp,
+            "portfolio_value": self.calculate_portfolio_value(current_prices),
+            "cash": self.cash,
+            "unrealized_pnl": self.unrealized_pnl(current_prices),
+            "realized_pnl": self.realized_pnl(),
+            "margin_used": self.used_margin(),
+            "positions": len(self.positions),
+            "leverage_ratio": self.get_margin_ratio(),
+        }
+
+        # Trim history if too large (keep last 100k snapshots)
+        if len(self.portfolio_history) >= 100000:
+            self.portfolio_history = self.portfolio_history[-50000:]
+
+        self.portfolio_history.append(snapshot)

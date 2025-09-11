@@ -22,7 +22,7 @@ class Position:
     position_type: PositionType
     margin_used: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate position data after initialization."""
         if self.entry_price <= 0:
             raise ValidationError(f"Entry price must be positive, got {self.entry_price}")
@@ -82,7 +82,7 @@ class Trade:
     pnl: float
     margin_used: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate trade data after initialization."""
         if self.quantity <= 0:
             raise ValidationError(f"Quantity must be positive, got {self.quantity}")

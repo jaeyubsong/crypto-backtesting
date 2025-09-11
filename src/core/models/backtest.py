@@ -24,7 +24,7 @@ class BacktestConfig:
     max_leverage: float
     maintenance_margin_rate: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate types after initialization."""
         # Validate enum types
         if not isinstance(self.symbol, Symbol):
