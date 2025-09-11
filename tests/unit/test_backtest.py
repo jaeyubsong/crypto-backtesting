@@ -96,8 +96,8 @@ class TestBacktestConfig:
         """Test detection of invalid trading parameters."""
         # Invalid leverage (too high)
         config_high_leverage = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=10000.0,
@@ -110,8 +110,8 @@ class TestBacktestConfig:
 
         # Invalid capital (negative)
         config_negative_capital = BacktestConfig(
-            symbol="BTCUSDT",
-            timeframe="1h",
+            symbol=Symbol.BTC,
+            timeframe=Timeframe.H1,
             start_date=datetime(2025, 1, 1, tzinfo=UTC),
             end_date=datetime(2025, 1, 31, tzinfo=UTC),
             initial_capital=-1000.0,  # Negative

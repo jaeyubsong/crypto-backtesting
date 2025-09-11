@@ -24,6 +24,20 @@ class BacktestConfig:
     max_leverage: float
     maintenance_margin_rate: float
 
+    def __post_init__(self):
+        """Validate types after initialization."""
+        # Validate enum types
+        if not isinstance(self.symbol, Symbol):
+            raise TypeError(f"symbol must be Symbol enum, got {type(self.symbol).__name__}")
+        if not isinstance(self.timeframe, Timeframe):
+            raise TypeError(
+                f"timeframe must be Timeframe enum, got {type(self.timeframe).__name__}"
+            )
+        if not isinstance(self.trading_mode, TradingMode):
+            raise TypeError(
+                f"trading_mode must be TradingMode enum, got {type(self.trading_mode).__name__}"
+            )
+
     def is_valid_date_range(self) -> bool:
         """Validate that end_date is after start_date."""
         return self.end_date > self.start_date

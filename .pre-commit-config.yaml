@@ -25,4 +25,5 @@ repos:
       - id: mypy
         args: [--ignore-missing-imports, --no-strict-optional]
         additional_dependencies: [types-requests]
-        exclude: ^tests/
+        # Include tests for type checking to catch type errors early
+        files: ^(src|tests)/.*\.py$
