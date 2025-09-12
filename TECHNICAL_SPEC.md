@@ -1,7 +1,8 @@
 # Technical Specification: Crypto Quant Backtesting Platform
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** September 10, 2025
+**Last Updated:** September 13, 2025
 
 ## 1. System Architecture Overview
 
@@ -22,37 +23,71 @@
                        └─────────────────┘    └─────────────────┘
 ```
 
-### 1.2. Project Structure
+### 1.2. Project Structure (Clean Architecture)
 
 ```
 crypto-trading/
 ├── src/
-│   ├── api/
+│   ├── core/                    # Domain logic (no external dependencies)
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── position.py      # Position and Trade models
+│   │   │   ├── portfolio.py     # Portfolio domain model
+│   │   │   └── backtest.py      # BacktestConfig, BacktestResults
+│   │   ├── interfaces/
+│   │   │   ├── __init__.py
+│   │   │   ├── data.py          # IDataLoader, IDataProcessor
+│   │   │   ├── portfolio.py     # IPortfolio, IOrderExecutor
+│   │   │   ├── strategy.py      # IStrategy
+│   │   │   └── metrics.py       # IMetricsCalculator
+│   │   ├── enums/
+│   │   │   ├── __init__.py
+│   │   │   ├── symbols.py       # Symbol enum (BTC, ETH)
+│   │   │   ├── timeframes.py    # Timeframe enum
+│   │   │   ├── trading_modes.py # TradingMode enum (SPOT, FUTURES)
+│   │   │   ├── position_types.py # PositionType enum (LONG, SHORT)
+│   │   │   └── action_types.py  # ActionType enum (BUY, SELL, LIQUIDATION)
+│   │   ├── exceptions/
+│   │   │   ├── __init__.py
+│   │   │   └── backtest.py      # Domain exceptions hierarchy
+│   │   ├── constants.py         # System constants and limits
+│   │   ├── types.py            # Protocol types to avoid circular imports
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       └── validation.py    # Input validation utilities
+│   ├── infrastructure/         # External dependencies
+│   │   ├── data/
+│   │   │   ├── __init__.py
+│   │   │   ├── csv_loader.py    # CSV file data loader
+│   │   │   └── processor.py     # Data processing utilities
+│   │   └── storage/
+│   │       ├── __init__.py
+│   │       ├── json_storage.py  # JSON results storage
+│   │       └── csv_storage.py   # CSV trade/portfolio export
+│   ├── application/            # Use cases/services
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── backtest_service.py
+│   │   │   └── metrics_service.py
+│   │   └── dto/
+│   │       ├── __init__.py
+│   │       └── api_models.py
+│   ├── api/                    # API layer
 │   │   ├── __init__.py
-│   │   ├── main.py              # FastAPI application
+│   │   ├── main.py             # FastAPI application
 │   │   ├── routers/
 │   │   │   ├── __init__.py
-│   │   │   ├── backtest.py      # Backtest endpoints
-│   │   │   └── data.py          # Data endpoints
-│   │   └── models/
+│   │   │   ├── backtest.py     # Backtest endpoints
+│   │   │   └── data.py         # Data endpoints
+│   │   └── schemas/
 │   │       ├── __init__.py
-│   │       ├── request.py       # API request models
-│   │       └── response.py      # API response models
-│   ├── backtesting/
-│   │   ├── __init__.py
-│   │   ├── engine.py            # Core backtesting engine
-│   │   ├── portfolio.py         # Portfolio management
-│   │   ├── strategy.py          # Strategy base class
-│   │   ├── executor.py          # Strategy execution
-│   │   └── metrics.py           # Performance calculations
-│   ├── data/
-│   │   ├── __init__.py
-│   │   ├── loader.py            # Data loading utilities
-│   │   └── processor.py         # Data processing utilities
-│   └── utils/
+│   │       └── api_models.py   # Pydantic schemas
+│   └── backtesting/           # Legacy compatibility layer
 │       ├── __init__.py
-│       ├── validators.py        # Input validation
-│       └── exceptions.py        # Custom exceptions
+│       ├── engine.py          # BacktestEngine (imports from core)
+│       ├── portfolio.py       # Portfolio wrapper
+│       ├── strategy.py        # Strategy base class
+│       └── metrics.py         # MetricsCalculator
 ├── data/
 │   └── binance/
 │       ├── spot/
@@ -244,8 +279,10 @@ class BacktestResults(BaseModel):
 
 **Response Model**:
 ```python
+from src.core.enums import Symbol
+
 class SymbolsResponse(BaseModel):
-    symbols: List[str]
+    symbols: List[Symbol]  # Type-safe symbols
     trading_modes: List[str]  # ["spot", "futures"]
 ```
 
@@ -291,8 +328,11 @@ class BacktestEngine:
 
 **portfolio.py**:
 ```python
-class Portfolio:
-    def __init__(self, initial_capital: float, trading_mode: str):
+from src.core.enums import TradingMode, Symbol
+from src.core.interfaces.portfolio import IPortfolio
+
+class Portfolio(IPortfolio):
+    def __init__(self, initial_capital: float, trading_mode: TradingMode):
         self.initial_capital = initial_capital
         self.cash = initial_capital
         self.positions = {}  # {symbol: Position}
@@ -676,6 +716,94 @@ Extension points for multi-asset backtesting:
 - Modify Portfolio to handle multiple positions
 - Update strategy framework for multi-symbol data
 - Enhance correlation and risk metrics
+
+## 12. Implementation Notes (Phase 2 Completed)
+
+### 12.1. Type-Safe Enumerations
+
+All string literals have been replaced with type-safe enums:
+
+```python
+from enum import StrEnum
+
+class Symbol(StrEnum):
+    BTC = "BTCUSDT"
+    ETH = "ETHUSDT"
+
+class TradingMode(StrEnum):
+    SPOT = "spot"
+    FUTURES = "futures"
+
+class PositionType(StrEnum):
+    LONG = "long"
+    SHORT = "short"
+
+class ActionType(StrEnum):
+    BUY = "buy"
+    SELL = "sell"
+    LIQUIDATION = "liquidation"
+```
+
+### 12.2. Exception Hierarchy
+
+Comprehensive domain-specific exceptions implemented:
+
+```python
+class BacktestException(Exception):
+    """Base exception for all backtest-related errors"""
+
+class ValidationError(BacktestException):
+    """Invalid input parameters"""
+
+class InsufficientFundsError(BacktestException):
+    """Not enough funds for operation"""
+
+class PositionNotFoundError(BacktestException):
+    """Position doesn't exist"""
+
+class DataError(BacktestException):
+    """Data access/processing errors"""
+
+class StrategyError(BacktestException):
+    """Strategy execution errors"""
+
+class CalculationError(BacktestException):
+    """Calculation/metric errors"""
+
+class ConfigurationError(BacktestException):
+    """Configuration errors"""
+```
+
+### 12.3. Portfolio Implementation Details
+
+The Portfolio class now includes complete trading logic:
+
+- **Trading Modes**: Separate calculation logic for SPOT vs FUTURES
+- **Portfolio Value Calculation**:
+  - FUTURES: `Portfolio Value = Cash + Unrealized PnL`
+  - SPOT: `Portfolio Value = Cash + Sum(Position Values)`
+- **Margin Management**: Full leverage support (1x-100x) with liquidation detection
+- **Position Limits**: Maximum 100 positions per portfolio
+- **Trade Size Limits**: MIN_TRADE_SIZE = 0.00001, MAX_TRADE_SIZE = 1,000,000
+- **Fee Structure**: 0.1% for spot/futures trades
+
+### 12.4. Input Validation
+
+Centralized validation utilities for consistency:
+
+```python
+def validate_symbol(symbol: Any) -> Symbol
+def validate_positive(value: float, param_name: str) -> float
+def validate_percentage(value: float) -> float
+def validate_leverage(leverage: float, max_leverage: float) -> float
+```
+
+### 12.5. Testing Infrastructure
+
+- **Test Coverage**: 90-100% on core modules
+- **Test Organization**: Separate test classes for SPOT and FUTURES modes
+- **Type Checking**: Strict mypy configuration with all tests type-checked
+- **Runtime Validation**: __post_init__ validation in dataclasses
 
 ---
 

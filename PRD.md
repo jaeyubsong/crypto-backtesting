@@ -1,7 +1,22 @@
 # Product Requirements Document: Crypto Quant Backtesting Platform
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** September 10, 2025
+**Last Updated:** September 13, 2025
+
+## Implementation Status
+
+**Current Phase:** Active Development - Phase 3 (Data Layer)
+
+**Completed Features (Phase 2):**
+- ✅ All core domain models (Position, Trade, Portfolio)
+- ✅ Complete Portfolio management with margin/leverage support
+- ✅ Trading mode distinction (SPOT vs FUTURES)
+- ✅ All Strategy API methods (Section 3.2)
+- ✅ Liquidation detection and risk management
+- ✅ Type-safe enumerations for symbols and trading modes
+- ✅ Comprehensive exception hierarchy
+- ✅ 130+ unit tests with 90-100% coverage
 
 ## 1. Introduction & Vision
 
@@ -78,6 +93,7 @@ A RESTful API will serve as the backend for the application.
   - **Action**: Retrieves the status and results of a specific backtest. If complete, it returns the performance metrics and chart data.
 - **GET /data/symbols**:
   - **Action**: Returns a list of available trading pairs from the Binance dataset.
+  - **Initial Implementation**: Limited to BTC (BTCUSDT) and ETH (ETHUSDT) for Phase 1-2.
 - **GET /data/history**:
   - **Action**: Returns historical OHLCV data for a given symbol and timeframe.
 
