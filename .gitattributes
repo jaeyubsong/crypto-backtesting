@@ -1,0 +1,28 @@
+# Git attributes for the project
+
+# Mark GitHub workflow files as binary to prevent merge conflicts and modifications
+# This makes Git treat them as binary files, preventing automatic merging
+.github/workflows/claude.yml -diff -merge binary
+.github/workflows/claude-code-review.yml -diff -merge binary
+
+# Python files
+*.py text diff=python
+
+# Data files
+*.csv binary
+*.parquet binary
+*.json text
+
+# Documentation
+*.md text
+*.txt text
+
+# Configuration
+*.yml text
+*.yaml text
+*.toml text
+*.ini text
+
+# Shell scripts
+*.sh text eol=lf
+*.bash text eol=lf

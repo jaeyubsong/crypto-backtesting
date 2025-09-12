@@ -8,6 +8,22 @@ This is a crypto-trading backtesting platform that enables quantitative cryptocu
 
 ## 🚨 CRITICAL DEVELOPMENT RULES
 
+### ⛔ PROTECTED FILES - NEVER MODIFY
+
+The following files are **STRICTLY PROTECTED** and must **NEVER** be modified:
+- `.github/workflows/claude.yml`
+- `.github/workflows/claude-code-review.yml`
+
+These GitHub workflow files are managed externally and contain specific formatting (including trailing whitespace) that must be preserved. The pre-commit hooks are configured to:
+1. **Exclude** these files from whitespace and EOF fixing
+2. **Block** any commits that attempt to modify them
+3. **Display an error** if changes are detected
+
+If you accidentally stage changes to these files:
+```bash
+git reset HEAD .github/workflows/claude.yml .github/workflows/claude-code-review.yml
+```
+
 ### 1. Test-Driven Development (TDD) - MANDATORY
 
 **ALWAYS follow the TDD cycle for core business logic:**

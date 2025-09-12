@@ -1,9 +1,21 @@
 repos:
+  # Custom hooks for project-specific rules
+  - repo: local
+    hooks:
+      - id: protect-workflow-files
+        name: Protect GitHub workflow files from modification
+        entry: scripts/check-protected-files.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^\.github/workflows/(claude\.yml|claude-code-review\.yml)$
       - id: end-of-file-fixer
+        exclude: ^\.github/workflows/(claude\.yml|claude-code-review\.yml)$
       - id: check-yaml
       - id: check-added-large-files
       - id: check-json
