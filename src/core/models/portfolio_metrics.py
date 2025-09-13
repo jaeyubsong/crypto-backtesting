@@ -110,6 +110,9 @@ class PortfolioMetrics:
         Returns:
             Position size. Positive for long, negative for short, 0 if no position.
         """
+        from src.core.utils.validation import validate_symbol
+
+        symbol = validate_symbol(symbol)
         position = self.core.positions.get(symbol)
         return position.size if position else 0.0
 
@@ -122,6 +125,9 @@ class PortfolioMetrics:
         Returns:
             Position leverage (0 if no position).
         """
+        from src.core.utils.validation import validate_symbol
+
+        symbol = validate_symbol(symbol)
         position = self.core.positions.get(symbol)
         return position.leverage if position else 0.0
 
@@ -135,5 +141,9 @@ class PortfolioMetrics:
         Returns:
             Unrealized PnL (0 if no position).
         """
+        from src.core.utils.validation import validate_positive, validate_symbol
+
+        symbol = validate_symbol(symbol)
+        current_price = validate_positive(current_price, "current_price")
         position = self.core.positions.get(symbol)
         return position.unrealized_pnl(current_price) if position else 0.0
