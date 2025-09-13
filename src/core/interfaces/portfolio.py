@@ -22,7 +22,9 @@ class IPortfolio(ABC):
         pass
 
     @abstractmethod
-    def close_position(self, symbol: Symbol, percentage: float = 100.0) -> bool:
+    def close_position(
+        self, symbol: Symbol, current_price: float, percentage: float = 100.0
+    ) -> bool:
         """Close a position."""
         pass
 

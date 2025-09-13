@@ -3,14 +3,14 @@ Portfolio domain model.
 To be implemented in Phase 2.
 """
 
-from dataclasses import dataclass
-from datetime import datetime
+import threading
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from src.core.constants import (
+    DEFAULT_TAKER_FEE,
     MAX_POSITIONS_PER_PORTFOLIO,
-    MAX_TRADE_SIZE,
-    MAX_TRADES_HISTORY,
-    MIN_TRADE_SIZE,
 )
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import (
@@ -25,6 +25,12 @@ from src.core.utils.validation import (
     validate_symbol,
 )
 
+from .portfolio_helpers import (
+    FeeCalculator,
+    OrderValidator,
+    PositionManager,
+    TradeRecorder,
+)
 from .position import Position, Trade
 
 
@@ -35,9 +41,10 @@ class Portfolio(IPortfolio):
     initial_capital: float
     cash: float
     positions: dict[Symbol, Position]
-    trades: list[Trade]
-    portfolio_history: list[dict]
+    trades: deque[Trade]
+    portfolio_history: deque[dict]
     trading_mode: TradingMode
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def calculate_portfolio_value(self, current_prices: dict[Symbol, float]) -> float:
         """Calculate total portfolio value based on trading mode.
@@ -154,99 +161,37 @@ class Portfolio(IPortfolio):
         - For SPOT: Buy asset (open long position)
         - For FUTURES: Open long or close short position
         """
-        # Validate inputs
-        symbol = validate_symbol(symbol)
-        price = validate_positive(price, "price")
-        amount = validate_positive(amount, "amount")
-        leverage = validate_positive(leverage, "leverage")
+        # Validate and calculate
+        symbol, amount, price, leverage = OrderValidator.validate_order(
+            symbol, amount, price, leverage
+        )
+        notional_value, margin_needed = OrderValidator.calculate_margin_needed(
+            amount, price, leverage
+        )
 
-        # Check trade size limits
-        if amount < MIN_TRADE_SIZE:
-            raise ValidationError(f"Trade size too small: {amount} < {MIN_TRADE_SIZE}")
-        if amount > MAX_TRADE_SIZE:
-            raise ValidationError(f"Trade size too large: {amount} > {MAX_TRADE_SIZE}")
-
-        # Calculate margin needed
-        notional_value = amount * price
-        margin_needed = notional_value / leverage if leverage > 0 else notional_value
-
-        # Check if we have enough cash
-        if margin_needed > self.cash:
-            raise InsufficientFundsError(
-                required=margin_needed,
-                available=self.cash,
-                operation=f"buying {amount} {symbol.value} at {price}",
+        with self._lock:  # Thread-safe operation
+            OrderValidator.check_sufficient_funds(
+                margin_needed, self.cash, f"buying {amount} {symbol.value} at {price}"
             )
 
-        # Check for existing position
-        if symbol in self.positions:
-            existing = self.positions[symbol]
-            if existing.position_type == PositionType.SHORT:
-                # Closing short position
-                close_price = price
-                fee = notional_value * 0.001  # 0.1% fee
-                self.close_position_at_price(symbol, close_price, fee)
-                # Record trade
-                trade = Trade(
-                    timestamp=datetime.now(),
-                    symbol=symbol,
-                    action=ActionType.BUY,
-                    quantity=amount,
-                    price=price,
-                    leverage=leverage,
-                    fee=fee,
-                    position_type=PositionType.SHORT,
-                    pnl=existing.unrealized_pnl(price) - fee,
-                    margin_used=0,
-                )
-                self.trades.append(trade)
-            # Trim trade history if it gets too long
-            if len(self.trades) > MAX_TRADES_HISTORY:
-                self.trades = self.trades[-MAX_TRADES_HISTORY:]
+            # Check for existing position
+            if symbol in self.positions:
+                existing = self.positions[symbol]
+                if existing.position_type == PositionType.SHORT:
+                    # Closing short position
+                    self._close_short_position(
+                        symbol, existing, amount, price, leverage, notional_value
+                    )
+                else:
+                    # Add to existing long position
+                    self._add_to_long_position(existing, amount, price, margin_needed)
             else:
-                # Add to existing long position
-                # Calculate new average entry price
-                total_size = existing.size + amount
-                total_value = (existing.size * existing.entry_price) + (amount * price)
-                new_entry_price = total_value / total_size
+                # Open new long position
+                self._open_long_position(
+                    symbol, amount, price, leverage, notional_value, margin_needed
+                )
 
-                # Update position
-                existing.size = total_size
-                existing.entry_price = new_entry_price
-                existing.margin_used += margin_needed
-                self.cash -= margin_needed
-        else:
-            # Open new long position
-            position = Position(
-                symbol=symbol,
-                size=amount,
-                entry_price=price,
-                leverage=leverage,
-                timestamp=datetime.now(),
-                position_type=PositionType.LONG,
-                margin_used=margin_needed,
-            )
-            self.add_position(position)
-
-            # Record trade
-            trade = Trade(
-                timestamp=datetime.now(),
-                symbol=symbol,
-                action=ActionType.BUY,
-                quantity=amount,
-                price=price,
-                leverage=leverage,
-                fee=notional_value * 0.001,  # 0.1% fee
-                position_type=PositionType.LONG,
-                pnl=0,
-                margin_used=margin_needed,
-            )
-            self.trades.append(trade)
-            # Trim trade history if it gets too long
-            if len(self.trades) > MAX_TRADES_HISTORY:
-                self.trades = self.trades[-MAX_TRADES_HISTORY:]
-
-        return True
+            return True
 
     def sell(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
         """Execute a sell order.
@@ -254,137 +199,128 @@ class Portfolio(IPortfolio):
         - For SPOT: Sell asset (close long position)
         - For FUTURES: Open short or close long position
         """
-        # Validate inputs
-        symbol = validate_symbol(symbol)
-        price = validate_positive(price, "price")
-        amount = validate_positive(amount, "amount")
-        leverage = validate_positive(leverage, "leverage")
+        # Validate and calculate
+        symbol, amount, price, leverage = OrderValidator.validate_order(
+            symbol, amount, price, leverage
+        )
+        notional_value, margin_needed = OrderValidator.calculate_margin_needed(
+            amount, price, leverage
+        )
 
-        # Check trade size limits
-        if amount < MIN_TRADE_SIZE:
-            raise ValidationError(f"Trade size too small: {amount} < {MIN_TRADE_SIZE}")
-        if amount > MAX_TRADE_SIZE:
-            raise ValidationError(f"Trade size too large: {amount} > {MAX_TRADE_SIZE}")
+        with self._lock:  # Thread-safe operation
+            # Check for existing position
+            if symbol in self.positions:
+                existing = self.positions[symbol]
+                if existing.position_type == PositionType.LONG:
+                    # Closing long position
+                    if self.trading_mode == TradingMode.SPOT and amount > existing.size:
+                        # For spot, can only sell what we have
+                        return False
 
-        # Calculate margin needed for short position
-        notional_value = amount * price
-        margin_needed = notional_value / leverage if leverage > 0 else notional_value
+                    close_price = price
+                    fee = notional_value * DEFAULT_TAKER_FEE
 
-        # Check for existing position
-        if symbol in self.positions:
-            existing = self.positions[symbol]
-            if existing.position_type == PositionType.LONG:
-                # Closing long position
-                if self.trading_mode == TradingMode.SPOT and amount > existing.size:
-                    # For spot, can only sell what we have
-                    return False
+                    if amount >= existing.size:
+                        # Close entire position
+                        self.close_position_at_price(symbol, close_price, fee)
+                    else:
+                        # Partial close
+                        partial_pnl = (close_price - existing.entry_price) * amount - fee
+                        partial_margin = existing.margin_used * (amount / existing.size)
 
-                close_price = price
-                fee = notional_value * 0.001  # 0.1% fee
+                        existing.size -= amount
+                        existing.margin_used -= partial_margin
+                        self.cash += partial_margin + partial_pnl
 
-                if amount >= existing.size:
-                    # Close entire position
-                    self.close_position_at_price(symbol, close_price, fee)
+                    # Record trade
+                    trade = Trade(
+                        timestamp=datetime.now(UTC),
+                        symbol=symbol,
+                        action=ActionType.SELL,
+                        quantity=amount,
+                        price=price,
+                        leverage=leverage,
+                        fee=fee,
+                        position_type=PositionType.LONG,
+                        pnl=existing.unrealized_pnl(price) * (amount / existing.size) - fee,
+                        margin_used=0,
+                    )
+                    self.trades.append(trade)
                 else:
-                    # Partial close
-                    partial_pnl = (close_price - existing.entry_price) * amount - fee
-                    partial_margin = existing.margin_used * (amount / existing.size)
+                    # Add to existing short position (futures only)
+                    if self.trading_mode == TradingMode.SPOT:
+                        return False  # Can't short in spot trading
 
-                    existing.size -= amount
-                    existing.margin_used -= partial_margin
-                    self.cash += partial_margin + partial_pnl
+                    if margin_needed > self.cash:
+                        raise InsufficientFundsError(
+                            required=margin_needed,
+                            available=self.cash,
+                            operation=f"adding to short position {symbol.value}",
+                        )
 
-                # Record trade
-                trade = Trade(
-                    timestamp=datetime.now(),
-                    symbol=symbol,
-                    action=ActionType.SELL,
-                    quantity=amount,
-                    price=price,
-                    leverage=leverage,
-                    fee=fee,
-                    position_type=PositionType.LONG,
-                    pnl=existing.unrealized_pnl(price) * (amount / existing.size) - fee,
-                    margin_used=0,
-                )
-                self.trades.append(trade)
-            # Trim trade history if it gets too long
-            if len(self.trades) > MAX_TRADES_HISTORY:
-                self.trades = self.trades[-MAX_TRADES_HISTORY:]
+                    # Calculate new average entry price
+                    total_size = existing.size + amount
+                    total_value = (existing.size * existing.entry_price) + (amount * price)
+                    new_entry_price = total_value / total_size
+
+                    # Update position
+                    existing.size = total_size
+                    existing.entry_price = new_entry_price
+                    existing.margin_used += margin_needed
+                    self.cash -= margin_needed
             else:
-                # Add to existing short position (futures only)
+                # Open new short position (futures only)
                 if self.trading_mode == TradingMode.SPOT:
-                    return False  # Can't short in spot trading
+                    return False  # Can't open short in spot
 
                 if margin_needed > self.cash:
                     raise InsufficientFundsError(
                         required=margin_needed,
                         available=self.cash,
-                        operation=f"adding to short position {symbol.value}",
+                        operation=f"opening short position {symbol.value}",
                     )
 
-                # Calculate new average entry price
-                total_size = existing.size + amount
-                total_value = (existing.size * existing.entry_price) + (amount * price)
-                new_entry_price = total_value / total_size
-
-                # Update position
-                existing.size = total_size
-                existing.entry_price = new_entry_price
-                existing.margin_used += margin_needed
-                self.cash -= margin_needed
-        else:
-            # Open new short position (futures only)
-            if self.trading_mode == TradingMode.SPOT:
-                return False  # Can't open short in spot
-
-            if margin_needed > self.cash:
-                raise InsufficientFundsError(
-                    required=margin_needed,
-                    available=self.cash,
-                    operation=f"opening short position {symbol.value}",
+                position = Position(
+                    symbol=symbol,
+                    size=amount,
+                    entry_price=price,
+                    leverage=leverage,
+                    timestamp=datetime.now(UTC),
+                    position_type=PositionType.SHORT,
+                    margin_used=margin_needed,
                 )
+                self.add_position(position)
 
-            position = Position(
-                symbol=symbol,
-                size=amount,
-                entry_price=price,
-                leverage=leverage,
-                timestamp=datetime.now(),
-                position_type=PositionType.SHORT,
-                margin_used=margin_needed,
-            )
-            self.add_position(position)
+                # Record trade
+                trade = Trade(
+                    timestamp=datetime.now(UTC),
+                    symbol=symbol,
+                    action=ActionType.SELL,
+                    quantity=amount,
+                    price=price,
+                    leverage=leverage,
+                    fee=notional_value * DEFAULT_TAKER_FEE,
+                    position_type=PositionType.SHORT,
+                    pnl=0,
+                    margin_used=margin_needed,
+                )
+                self.trades.append(trade)
 
-            # Record trade
-            trade = Trade(
-                timestamp=datetime.now(),
-                symbol=symbol,
-                action=ActionType.SELL,
-                quantity=amount,
-                price=price,
-                leverage=leverage,
-                fee=notional_value * 0.001,  # 0.1% fee
-                position_type=PositionType.SHORT,
-                pnl=0,
-                margin_used=margin_needed,
-            )
-            self.trades.append(trade)
-            # Trim trade history if it gets too long
-            if len(self.trades) > MAX_TRADES_HISTORY:
-                self.trades = self.trades[-MAX_TRADES_HISTORY:]
+            return True
 
-        return True
-
-    def close_position(self, symbol: Symbol, percentage: float = 100.0) -> bool:
+    def close_position(
+        self, symbol: Symbol, current_price: float, percentage: float = 100.0
+    ) -> bool:
         """Close a position (partially or fully).
 
         Args:
             symbol: Symbol to close
+            current_price: Current market price for closing
             percentage: Percentage of position to close (0-100)
         """
         # Validate inputs
         symbol = validate_symbol(symbol)
+        current_price = validate_positive(current_price, "current_price")
         percentage = validate_percentage(percentage)
 
         if symbol not in self.positions:
@@ -393,10 +329,8 @@ class Portfolio(IPortfolio):
         position = self.positions[symbol]
         close_amount = position.size * (percentage / 100.0)
 
-        # Estimate current price (would come from market data in real implementation)
-        # For now, use entry price as placeholder
-        close_price = position.entry_price
-        fee = close_amount * close_price * 0.001  # 0.1% fee
+        close_price = current_price
+        fee = close_amount * close_price * DEFAULT_TAKER_FEE
 
         if percentage >= 100:
             # Full close
@@ -518,8 +452,72 @@ class Portfolio(IPortfolio):
             "leverage_ratio": self.get_margin_ratio(),
         }
 
-        # Trim history if too large (keep last 100k snapshots)
-        if len(self.portfolio_history) >= 100000:
-            self.portfolio_history = self.portfolio_history[-50000:]
-
         self.portfolio_history.append(snapshot)
+
+    # Helper methods to reduce complexity
+    def _close_short_position(
+        self,
+        symbol: Symbol,
+        position: Position,
+        amount: float,
+        price: float,
+        leverage: float,
+        notional_value: float,
+    ) -> None:
+        """Close a short position and record trade."""
+        fee = FeeCalculator.calculate_fee(notional_value)
+        self.close_position_at_price(symbol, price, fee)
+
+        trade = TradeRecorder.create_trade(
+            symbol=symbol,
+            action=ActionType.BUY,
+            quantity=amount,
+            price=price,
+            leverage=leverage,
+            fee=fee,
+            position_type=PositionType.SHORT,
+            pnl=position.unrealized_pnl(price) - fee,
+            margin_used=0,
+        )
+        self.trades.append(trade)
+
+    def _add_to_long_position(
+        self, position: Position, amount: float, price: float, margin_needed: float
+    ) -> None:
+        """Add to existing long position."""
+        PositionManager.update_position_size(position, amount, price, margin_needed)
+        self.cash -= margin_needed
+
+    def _open_long_position(
+        self,
+        symbol: Symbol,
+        amount: float,
+        price: float,
+        leverage: float,
+        notional_value: float,
+        margin_needed: float,
+    ) -> None:
+        """Open new long position and record trade."""
+        position = PositionManager.create_position(
+            symbol=symbol,
+            size=amount,
+            entry_price=price,
+            leverage=leverage,
+            position_type=PositionType.LONG,
+            margin_used=margin_needed,
+        )
+        self.add_position(position)
+
+        fee = FeeCalculator.calculate_fee(notional_value)
+        trade = TradeRecorder.create_trade(
+            symbol=symbol,
+            action=ActionType.BUY,
+            quantity=amount,
+            price=price,
+            leverage=leverage,
+            fee=fee,
+            position_type=PositionType.LONG,
+            pnl=0,
+            margin_used=margin_needed,
+        )
+        self.trades.append(trade)
