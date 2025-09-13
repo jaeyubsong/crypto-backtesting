@@ -8,7 +8,8 @@ and ensure system stability.
 # Portfolio Limits
 MAX_POSITIONS_PER_PORTFOLIO = 100  # Maximum number of open positions
 MAX_TRADES_HISTORY = 10000  # Maximum trades to keep in history
-MAX_PORTFOLIO_HISTORY = 5000  # Maximum portfolio snapshots to keep
+MAX_PORTFOLIO_HISTORY = 100000  # Maximum portfolio snapshots to keep
+PORTFOLIO_HISTORY_TRIM_TO = 50000  # Trim to this many entries when limit exceeded
 
 # Trading Limits
 MIN_TRADE_SIZE = 0.00001  # Minimum trade size (prevents dust trades)

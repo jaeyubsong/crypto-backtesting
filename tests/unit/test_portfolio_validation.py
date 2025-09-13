@@ -3,6 +3,7 @@ Unit tests for Portfolio validation and limits.
 Tests the Phase 1 fixes for input validation and resource limits.
 """
 
+from collections import deque
 from datetime import UTC, datetime
 
 import pytest
@@ -23,8 +24,8 @@ class TestPortfolioInputValidation:
             initial_capital=10000.0,
             cash=10000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -38,8 +39,8 @@ class TestPortfolioInputValidation:
             initial_capital=10000.0,
             cash=10000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -52,8 +53,8 @@ class TestPortfolioInputValidation:
             initial_capital=10000.0,
             cash=10000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -66,8 +67,8 @@ class TestPortfolioInputValidation:
             initial_capital=10000.0,
             cash=10000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -81,8 +82,8 @@ class TestPortfolioInputValidation:
             initial_capital=10000.0,
             cash=10000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -95,8 +96,8 @@ class TestPortfolioInputValidation:
             initial_capital=100000000.0,  # Large capital
             cash=100000000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -109,8 +110,8 @@ class TestPortfolioInputValidation:
             initial_capital=1000.0,
             cash=1000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -133,8 +134,8 @@ class TestPortfolioResourceLimits:
             initial_capital=1000000.0,
             cash=1000000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -186,8 +187,8 @@ class TestPortfolioResourceLimits:
             initial_capital=1000000.0,
             cash=1000000.0,
             positions=positions,
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -195,7 +196,7 @@ class TestPortfolioResourceLimits:
         # This is a workaround since we only have 2 symbols
         for i in range(MAX_POSITIONS_PER_PORTFOLIO):
             # Create fake positions just for counting
-            portfolio.positions[f"FAKE{i}"] = None  # type: ignore
+            portfolio.positions[f"FAKE{i}"] = None
 
         # Now try to add one more
         new_position = Position(
@@ -231,20 +232,20 @@ class TestPortfolioClosePosition:
             initial_capital=10000.0,
             cash=5000.0,
             positions={Symbol.BTC: btc_position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
         # Test invalid percentages
         with pytest.raises(ValidationError, match="percentage must be between 0 and 100"):
-            portfolio.close_position(Symbol.BTC, 0)  # 0% invalid
+            portfolio.close_position(Symbol.BTC, current_price=50000.0, percentage=0)  # 0% invalid
 
         with pytest.raises(ValidationError, match="percentage must be between 0 and 100"):
-            portfolio.close_position(Symbol.BTC, 101)  # Over 100%
+            portfolio.close_position(Symbol.BTC, current_price=50000.0, percentage=101)  # Over 100%
 
         with pytest.raises(ValidationError, match="percentage must be between 0 and 100"):
-            portfolio.close_position(Symbol.BTC, -10)  # Negative
+            portfolio.close_position(Symbol.BTC, current_price=50000.0, percentage=-10)  # Negative
 
     def test_should_reject_string_symbol_in_close_position(self) -> None:
         """Test that close_position rejects string symbols."""
@@ -252,8 +253,8 @@ class TestPortfolioClosePosition:
             initial_capital=10000.0,
             cash=10000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 

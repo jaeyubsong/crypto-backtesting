@@ -1,0 +1,138 @@
+"""
+Portfolio risk management.
+
+This module handles liquidation detection, margin calls, and risk controls
+following the Single Responsibility Principle for risk management.
+"""
+
+from typing import TYPE_CHECKING
+
+from src.core.constants import DEFAULT_TAKER_FEE
+from src.core.enums import Symbol
+from src.core.exceptions.backtest import PositionNotFoundError, ValidationError
+from src.core.utils.validation import validate_positive, validate_symbol
+
+if TYPE_CHECKING:
+    from .portfolio_core import PortfolioCore
+
+
+class PortfolioRisk:
+    """Portfolio risk management.
+
+    Handles liquidation detection, position closure, and risk controls.
+    """
+
+    def __init__(self, portfolio_core: "PortfolioCore") -> None:
+        """Initialize with portfolio core state.
+
+        Args:
+            portfolio_core: The portfolio core state to manage risks for
+        """
+        self.core = portfolio_core
+
+    def check_liquidation(
+        self, current_prices: dict[Symbol, float], maintenance_margin_rate: float = 0.05
+    ) -> list[Symbol]:
+        """Check and return symbols at risk of liquidation.
+
+        Args:
+            current_prices: Current market prices
+            maintenance_margin_rate: Maintenance margin requirement (default 5%)
+
+        Returns:
+            List of symbols that should be liquidated
+        """
+        at_risk_symbols = []
+
+        for symbol, position in self.core.positions.items():
+            if symbol not in current_prices:
+                continue
+
+            # Check if position is at liquidation risk
+            if position.is_liquidation_risk(current_prices[symbol], maintenance_margin_rate):
+                at_risk_symbols.append(symbol)
+
+        return at_risk_symbols
+
+    def close_position_at_price(self, symbol: Symbol, close_price: float, fee: float) -> float:
+        """Close a position at a specific price and return realized PnL.
+
+        This is the original method for closing with known price.
+
+        Args:
+            symbol: Symbol to close
+            close_price: Price at which to close
+            fee: Trading fee to deduct
+
+        Returns:
+            Realized PnL from closing the position
+
+        Raises:
+            ValidationError: If parameters are invalid
+            PositionNotFoundError: If position doesn't exist
+        """
+        # Validate inputs
+        if not symbol or not isinstance(symbol, Symbol):
+            raise ValidationError("Symbol must be a valid Symbol enum")
+        if close_price <= 0:
+            raise ValidationError("Close price must be positive")
+        if fee < 0:
+            raise ValidationError("Fee must be non-negative")
+
+        if symbol not in self.core.positions:
+            raise PositionNotFoundError(str(symbol))
+
+        position = self.core.positions[symbol]
+        unrealized_pnl = position.unrealized_pnl(close_price)
+        realized_pnl = unrealized_pnl - fee
+
+        # Release margin and add realized PnL
+        self.core.cash += position.margin_used + realized_pnl
+
+        # Remove position
+        del self.core.positions[symbol]
+
+        return realized_pnl
+
+    def close_position(
+        self, symbol: Symbol, current_price: float, percentage: float = 100.0
+    ) -> bool:
+        """Close a position (partially or fully).
+
+        Args:
+            symbol: Symbol to close
+            current_price: Current market price for closing
+            percentage: Percentage of position to close (0-100)
+
+        Returns:
+            True if position was closed successfully
+        """
+        # Validate inputs
+        symbol = validate_symbol(symbol)
+        current_price = validate_positive(current_price, "current_price")
+        from src.core.utils.validation import validate_percentage
+
+        percentage = validate_percentage(percentage)
+
+        if symbol not in self.core.positions:
+            return False
+
+        position = self.core.positions[symbol]
+        close_amount = position.size * (percentage / 100.0)
+
+        close_price = current_price
+        fee = close_amount * close_price * DEFAULT_TAKER_FEE
+
+        if percentage >= 100:
+            # Full close
+            self.close_position_at_price(symbol, close_price, fee)
+        else:
+            # Partial close
+            partial_pnl = position.unrealized_pnl(close_price) * (percentage / 100.0) - fee
+            partial_margin = position.margin_used * (percentage / 100.0)
+
+            position.size *= 1 - percentage / 100.0
+            position.margin_used *= 1 - percentage / 100.0
+            self.core.cash += partial_margin + partial_pnl
+
+        return True
