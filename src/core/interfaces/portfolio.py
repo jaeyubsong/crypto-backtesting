@@ -5,7 +5,7 @@ To be implemented in Phase 4.
 
 from abc import ABC, abstractmethod
 
-from src.core.enums import Symbol
+from src.core.enums import ActionType, Symbol, TradingMode
 
 
 class IPortfolio(ABC):
@@ -58,16 +58,20 @@ class IOrderExecutor(ABC):
     """Abstract interface for order execution."""
 
     @abstractmethod
-    def execute_order(self, symbol: str, action: str, amount: float, price: float) -> bool:
+    def execute_order(
+        self, symbol: Symbol, action: ActionType, amount: float, price: float
+    ) -> bool:
         """Execute an order."""
         pass
 
     @abstractmethod
-    def validate_order(self, symbol: str, action: str, amount: float, leverage: float) -> bool:
+    def validate_order(
+        self, symbol: Symbol, action: ActionType, amount: float, leverage: float
+    ) -> bool:
         """Validate order parameters."""
         pass
 
     @abstractmethod
-    def calculate_fees(self, notional_value: float, trading_mode: str) -> float:
+    def calculate_fees(self, notional_value: float, trading_mode: TradingMode) -> float:
         """Calculate trading fees."""
         pass
