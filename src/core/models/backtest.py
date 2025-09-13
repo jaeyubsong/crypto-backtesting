@@ -25,7 +25,14 @@ class BacktestConfig:
     maintenance_margin_rate: float
 
     def __post_init__(self) -> None:
-        """Validate types after initialization."""
+        """Validate configuration after initialization.
+
+        Performs comprehensive validation to fail fast on invalid configurations.
+
+        Raises:
+            TypeError: If enum types are incorrect
+            ValueError: If configuration values are invalid
+        """
         # Validate enum types
         if not isinstance(self.symbol, Symbol):
             raise TypeError(f"symbol must be Symbol enum, got {type(self.symbol).__name__}")
@@ -36,6 +43,28 @@ class BacktestConfig:
         if not isinstance(self.trading_mode, TradingMode):
             raise TypeError(
                 f"trading_mode must be TradingMode enum, got {type(self.trading_mode).__name__}"
+            )
+
+        # Validate configuration values - fail fast
+        if not self.is_valid_date_range():
+            raise ValueError(
+                f"Invalid date range: start_date ({self.start_date}) must be before "
+                f"end_date ({self.end_date})"
+            )
+
+        if not self.is_valid_capital():
+            raise ValueError(f"Invalid initial capital: {self.initial_capital}. Must be positive.")
+
+        if not self.is_valid_leverage():
+            raise ValueError(
+                f"Invalid leverage: {self.max_leverage} for trading mode {self.trading_mode}. "
+                f"Must be within acceptable bounds for the trading mode."
+            )
+
+        if not self.is_valid_margin_rate():
+            raise ValueError(
+                f"Invalid maintenance margin rate: {self.maintenance_margin_rate}. "
+                f"Must be between 0.0 and 0.1 (0% to 10%)."
             )
 
     def is_valid_date_range(self) -> bool:

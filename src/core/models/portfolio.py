@@ -41,9 +41,6 @@ class Portfolio(IPortfolio):
         trading_mode: TradingMode = TradingMode.SPOT,
     ) -> None:
         """Initialize Portfolio with composition pattern."""
-        self.initial_capital = initial_capital
-        self.trading_mode = trading_mode
-
         # Initialize collections if not provided
         if positions is None:
             positions = {}
@@ -52,87 +49,65 @@ class Portfolio(IPortfolio):
         if portfolio_history is None:
             portfolio_history = deque()
 
-        # Store initial values in dict for property access
-        self.__dict__["_cash"] = cash
-        self.__dict__["_positions"] = positions
-        self.__dict__["_trades"] = trades
-        self.__dict__["_portfolio_history"] = portfolio_history
-
-        self._init_components()
-
-    def _init_components(self) -> None:
-        """Initialize composed components."""
-        # Create the core state manager (it will manage the actual state)
+        # Create the core state manager first - single source of truth
         self._core = PortfolioCore(
-            initial_capital=self.initial_capital,
-            cash=self.cash,
-            positions=self.positions,
-            trades=self.trades,
-            portfolio_history=self.portfolio_history,
-            trading_mode=self.trading_mode,
+            initial_capital=initial_capital,
+            cash=cash,
+            positions=positions,
+            trades=trades,
+            portfolio_history=portfolio_history,
+            trading_mode=trading_mode,
         )
 
-        # Create specialized components
+        # Store reference values for interface compatibility
+        self.initial_capital = initial_capital
+        self.trading_mode = trading_mode
+
+        # Initialize specialized components
         self._trading = PortfolioTrading(self._core)
         self._risk = PortfolioRisk(self._core)
         self._metrics = PortfolioMetrics(self._core)
 
-    # State synchronization properties
+    # Simplified property delegation - core is always available
     @property
     def cash(self) -> float:
         """Get current cash (delegates to core)."""
-        return self._core.cash if hasattr(self, "_core") else self.__dict__.get("_cash", 0.0)
+        return self._core.cash
 
     @cash.setter
     def cash(self, value: float) -> None:
-        """Set cash value (updates both self and core)."""
-        self.__dict__["_cash"] = value
-        if hasattr(self, "_core"):
-            self._core.cash = value
+        """Set cash value (delegates to core)."""
+        self._core.cash = value
 
     @property
-    def positions(self) -> dict:
+    def positions(self) -> dict[Symbol, Position]:
         """Get current positions (delegates to core)."""
-        return (
-            self._core.positions if hasattr(self, "_core") else self.__dict__.get("_positions", {})
-        )
+        return self._core.positions
 
     @positions.setter
-    def positions(self, value: dict) -> None:
-        """Set positions (updates both self and core)."""
-        self.__dict__["_positions"] = value
-        if hasattr(self, "_core"):
-            self._core.positions = value
+    def positions(self, value: dict[Symbol, Position]) -> None:
+        """Set positions (delegates to core)."""
+        self._core.positions = value
 
     @property
-    def trades(self) -> deque:
+    def trades(self) -> deque[Trade]:
         """Get trade history (delegates to core)."""
-        return (
-            self._core.trades if hasattr(self, "_core") else self.__dict__.get("_trades", deque())
-        )
+        return self._core.trades
 
     @trades.setter
-    def trades(self, value: deque) -> None:
-        """Set trade history (updates both self and core)."""
-        self.__dict__["_trades"] = value
-        if hasattr(self, "_core"):
-            self._core.trades = value
+    def trades(self, value: deque[Trade]) -> None:
+        """Set trade history (delegates to core)."""
+        self._core.trades = value
 
     @property
-    def portfolio_history(self) -> deque:
+    def portfolio_history(self) -> deque[dict[str, Any]]:
         """Get portfolio history (delegates to core)."""
-        return (
-            self._core.portfolio_history
-            if hasattr(self, "_core")
-            else self.__dict__.get("_portfolio_history", deque())
-        )
+        return self._core.portfolio_history
 
     @portfolio_history.setter
-    def portfolio_history(self, value: deque) -> None:
-        """Set portfolio history (updates both self and core)."""
-        self.__dict__["_portfolio_history"] = value
-        if hasattr(self, "_core"):
-            self._core.portfolio_history = value
+    def portfolio_history(self, value: deque[dict[str, Any]]) -> None:
+        """Set portfolio history (delegates to core)."""
+        self._core.portfolio_history = value
 
     # Core Portfolio Interface (IPortfolio)
     def buy(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:

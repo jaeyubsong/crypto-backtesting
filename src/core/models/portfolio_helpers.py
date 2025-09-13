@@ -2,11 +2,136 @@
 
 from datetime import UTC, datetime
 
-from src.core.constants import DEFAULT_TAKER_FEE, MAX_TRADE_SIZE, MIN_TRADE_SIZE
+from src.core.constants import (
+    DEFAULT_TAKER_FEE,
+    MAX_POSITIONS_PER_PORTFOLIO,
+    MAX_TRADE_SIZE,
+    MIN_TRADE_SIZE,
+)
 from src.core.enums import ActionType, PositionType, Symbol
 from src.core.exceptions.backtest import InsufficientFundsError, ValidationError
 from src.core.models.position import Position, Trade
 from src.core.utils.validation import validate_positive, validate_symbol
+
+
+class PortfolioValidator:
+    """Centralized validation helper for portfolio operations.
+
+    Consolidates all portfolio-related validation logic to avoid duplication
+    across portfolio_core.py, portfolio_trading.py, and portfolio_risk.py.
+    """
+
+    @staticmethod
+    def validate_position_for_add(position: Position, position_count: int) -> None:
+        """Validate position before adding to portfolio.
+
+        Args:
+            position: Position to validate
+            position_count: Current number of positions in portfolio
+
+        Raises:
+            ValidationError: If position is invalid or limits exceeded
+        """
+        # Check position limit
+        if position_count >= MAX_POSITIONS_PER_PORTFOLIO:
+            raise ValidationError(
+                f"Maximum positions limit reached ({MAX_POSITIONS_PER_PORTFOLIO})"
+            )
+
+        # Validate position instance
+        if not isinstance(position, Position):
+            raise ValidationError("Position must be a valid Position instance")
+
+        # Validate position attributes
+        if not position.symbol or not isinstance(position.symbol, Symbol):
+            raise ValidationError("Position symbol must be a valid Symbol enum")
+
+        if position.leverage <= 0:
+            raise ValidationError("Position leverage must be positive")
+
+        if position.margin_used < 0:
+            raise ValidationError("Position margin_used must be non-negative")
+
+    @staticmethod
+    def validate_position_exists(symbol: Symbol, positions: dict) -> None:
+        """Validate that position exists for the given symbol.
+
+        Args:
+            symbol: Symbol to check
+            positions: Portfolio positions dictionary
+
+        Raises:
+            ValidationError: If position not found
+        """
+        if symbol not in positions:
+            raise ValidationError(f"Position not found for symbol: {symbol}")
+
+    @staticmethod
+    def validate_close_position_params(
+        symbol: Symbol, close_price: float, fee: float
+    ) -> tuple[Symbol, float, float]:
+        """Validate parameters for closing a position.
+
+        Args:
+            symbol: Position symbol
+            close_price: Closing price
+            fee: Trading fee
+
+        Returns:
+            Validated parameters
+
+        Raises:
+            ValidationError: If parameters are invalid
+        """
+        if not isinstance(symbol, Symbol):
+            raise ValidationError("Symbol must be a valid Symbol enum")
+
+        if close_price <= 0:
+            raise ValidationError("Close price must be positive")
+
+        if fee < 0:
+            raise ValidationError("Fee must be non-negative")
+
+        return symbol, close_price, fee
+
+    @staticmethod
+    def validate_margin_requirement(
+        margin_needed: float, available_cash: float, operation: str
+    ) -> None:
+        """Validate sufficient margin is available.
+
+        Args:
+            margin_needed: Required margin amount
+            available_cash: Available cash/margin
+            operation: Description of operation for error context
+
+        Raises:
+            InsufficientFundsError: If insufficient funds
+        """
+        if margin_needed > available_cash:
+            raise InsufficientFundsError(
+                required=margin_needed,
+                available=available_cash,
+                operation=operation,
+            )
+
+    @staticmethod
+    def validate_percentage(percentage: float, name: str = "percentage") -> float:
+        """Validate percentage is in valid range.
+
+        Args:
+            percentage: Percentage to validate (0-100, exclusive of 0)
+            name: Name for error messages
+
+        Returns:
+            Validated percentage
+
+        Raises:
+            ValidationError: If percentage is invalid
+        """
+        if percentage <= 0 or percentage > 100:
+            raise ValidationError(f"{name} must be between 0 and 100, got {percentage}")
+        return percentage
 
 
 class OrderValidator:

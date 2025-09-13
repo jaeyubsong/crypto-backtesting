@@ -6,7 +6,7 @@ To be implemented in Phase 2.
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.core.enums import ActionType, PositionType, Symbol
+from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import ValidationError
 
 
@@ -65,6 +65,159 @@ class Position:
     def position_value(self, current_price: float) -> float:
         """Calculate current position value at given price."""
         return abs(self.size) * current_price
+
+    @classmethod
+    def create_long(
+        cls,
+        symbol: Symbol,
+        size: float,
+        entry_price: float,
+        leverage: float = 1.0,
+        timestamp: datetime | None = None,
+        trading_mode: TradingMode = TradingMode.SPOT,
+    ) -> "Position":
+        """Factory method to create a long position.
+
+        Args:
+            symbol: Trading symbol
+            size: Position size (should be positive)
+            entry_price: Entry price for the position
+            leverage: Leverage multiplier (default 1.0)
+            timestamp: Position creation time (default now)
+            trading_mode: Trading mode for margin calculation
+
+        Returns:
+            New long Position instance
+        """
+        if timestamp is None:
+            timestamp = datetime.now()
+
+        # Ensure positive size for long position
+        position_size = abs(size)
+
+        # Calculate margin used based on trading mode
+        margin_used = cls._calculate_margin_used(position_size, entry_price, leverage, trading_mode)
+
+        return cls(
+            symbol=symbol,
+            size=position_size,
+            entry_price=entry_price,
+            leverage=leverage,
+            timestamp=timestamp,
+            position_type=PositionType.LONG,
+            margin_used=margin_used,
+        )
+
+    @classmethod
+    def create_short(
+        cls,
+        symbol: Symbol,
+        size: float,
+        entry_price: float,
+        leverage: float = 1.0,
+        timestamp: datetime | None = None,
+        trading_mode: TradingMode = TradingMode.FUTURES,
+    ) -> "Position":
+        """Factory method to create a short position.
+
+        Args:
+            symbol: Trading symbol
+            size: Position size (will be made negative)
+            entry_price: Entry price for the position
+            leverage: Leverage multiplier (default 1.0)
+            timestamp: Position creation time (default now)
+            trading_mode: Trading mode for margin calculation
+
+        Returns:
+            New short Position instance
+
+        Raises:
+            ValidationError: If trying to create short position in SPOT mode
+        """
+        if timestamp is None:
+            timestamp = datetime.now()
+
+        # Validate short positions are allowed
+        if trading_mode == TradingMode.SPOT:
+            raise ValidationError("Short positions not allowed in SPOT trading mode")
+
+        # Ensure negative size for short position
+        position_size = -abs(size)
+
+        # Calculate margin used based on trading mode
+        margin_used = cls._calculate_margin_used(abs(size), entry_price, leverage, trading_mode)
+
+        return cls(
+            symbol=symbol,
+            size=position_size,
+            entry_price=entry_price,
+            leverage=leverage,
+            timestamp=timestamp,
+            position_type=PositionType.SHORT,
+            margin_used=margin_used,
+        )
+
+    @classmethod
+    def create_from_trade(
+        cls,
+        trade: "Trade",
+        trading_mode: TradingMode = TradingMode.SPOT,
+    ) -> "Position":
+        """Factory method to create a position from a trade.
+
+        Args:
+            trade: Trade to convert to position
+            trading_mode: Trading mode for margin calculation
+
+        Returns:
+            New Position instance based on trade
+        """
+        # Determine position type and size based on trade action
+        if trade.action == ActionType.BUY:
+            return cls.create_long(
+                symbol=trade.symbol,
+                size=trade.quantity,
+                entry_price=trade.price,
+                leverage=trade.leverage,
+                timestamp=trade.timestamp,
+                trading_mode=trading_mode,
+            )
+        else:  # SELL
+            # Only create short position if not in SPOT mode
+            if trading_mode == TradingMode.SPOT:
+                raise ValidationError("Cannot create short position from SELL in SPOT mode")
+            return cls.create_short(
+                symbol=trade.symbol,
+                size=trade.quantity,
+                entry_price=trade.price,
+                leverage=trade.leverage,
+                timestamp=trade.timestamp,
+                trading_mode=trading_mode,
+            )
+
+    @classmethod
+    def _calculate_margin_used(
+        cls, size: float, price: float, leverage: float, trading_mode: TradingMode
+    ) -> float:
+        """Calculate margin required for a position.
+
+        Args:
+            size: Position size (positive)
+            price: Entry price
+            leverage: Leverage multiplier
+            trading_mode: Trading mode
+
+        Returns:
+            Margin amount required
+        """
+        notional_value = size * price
+
+        if trading_mode == TradingMode.SPOT:
+            # SPOT trading: full value is margin (no leverage effect on margin)
+            return notional_value
+        else:
+            # FUTURES/MARGIN trading: margin is reduced by leverage
+            return notional_value / leverage
 
 
 @dataclass

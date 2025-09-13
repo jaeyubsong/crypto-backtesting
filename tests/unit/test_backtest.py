@@ -5,6 +5,8 @@ Following TDD approach - write failing tests first.
 
 from datetime import UTC, datetime
 
+import pytest
+
 from src.core.enums import ActionType, PositionType, Symbol, Timeframe, TradingMode
 from src.core.models.backtest import BacktestConfig, BacktestResults
 from src.core.models.position import Trade
@@ -58,22 +60,22 @@ class TestBacktestConfig:
         assert config.duration_days() == 30
 
     def test_should_detect_invalid_date_range(self) -> None:
-        """Test detection of invalid date ranges."""
+        """Test detection of invalid date ranges - now caught automatically."""
         start_date = datetime(2025, 1, 31, tzinfo=UTC)
         end_date = datetime(2025, 1, 1, tzinfo=UTC)  # End before start
 
-        config = BacktestConfig(
-            symbol=Symbol.BTC,
-            timeframe=Timeframe.H1,
-            start_date=start_date,
-            end_date=end_date,
-            initial_capital=10000.0,
-            trading_mode=TradingMode.FUTURES,
-            max_leverage=5.0,
-            maintenance_margin_rate=0.005,
-        )
-
-        assert not config.is_valid_date_range()
+        # Automatic validation should catch this during construction
+        with pytest.raises(ValueError, match="Invalid date range"):
+            BacktestConfig(
+                symbol=Symbol.BTC,
+                timeframe=Timeframe.H1,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=10000.0,
+                trading_mode=TradingMode.FUTURES,
+                max_leverage=5.0,
+                maintenance_margin_rate=0.005,
+            )
 
     def test_should_validate_trading_parameters(self) -> None:
         """Test validation of trading parameters."""
@@ -93,34 +95,32 @@ class TestBacktestConfig:
         assert config.is_valid_margin_rate()
 
     def test_should_detect_invalid_trading_parameters(self) -> None:
-        """Test detection of invalid trading parameters."""
-        # Invalid leverage (too high)
-        config_high_leverage = BacktestConfig(
-            symbol=Symbol.BTC,
-            timeframe=Timeframe.H1,
-            start_date=datetime(2025, 1, 1, tzinfo=UTC),
-            end_date=datetime(2025, 1, 31, tzinfo=UTC),
-            initial_capital=10000.0,
-            trading_mode=TradingMode.FUTURES,
-            max_leverage=150.0,  # Too high
-            maintenance_margin_rate=0.005,
-        )
+        """Test detection of invalid trading parameters - now caught automatically."""
+        # Invalid leverage (too high) - automatic validation should catch this
+        with pytest.raises(ValueError, match="Invalid leverage"):
+            BacktestConfig(
+                symbol=Symbol.BTC,
+                timeframe=Timeframe.H1,
+                start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 1, 31, tzinfo=UTC),
+                initial_capital=10000.0,
+                trading_mode=TradingMode.FUTURES,
+                max_leverage=150.0,  # Too high
+                maintenance_margin_rate=0.005,
+            )
 
-        assert not config_high_leverage.is_valid_leverage()
-
-        # Invalid capital (negative)
-        config_negative_capital = BacktestConfig(
-            symbol=Symbol.BTC,
-            timeframe=Timeframe.H1,
-            start_date=datetime(2025, 1, 1, tzinfo=UTC),
-            end_date=datetime(2025, 1, 31, tzinfo=UTC),
-            initial_capital=-1000.0,  # Negative
-            trading_mode=TradingMode.FUTURES,
-            max_leverage=10.0,
-            maintenance_margin_rate=0.005,
-        )
-
-        assert not config_negative_capital.is_valid_capital()
+        # Invalid capital (negative) - automatic validation should catch this
+        with pytest.raises(ValueError, match="Invalid initial capital"):
+            BacktestConfig(
+                symbol=Symbol.BTC,
+                timeframe=Timeframe.H1,
+                start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 1, 31, tzinfo=UTC),
+                initial_capital=-1000.0,  # Negative
+                trading_mode=TradingMode.FUTURES,
+                max_leverage=10.0,
+                maintenance_margin_rate=0.005,
+            )
 
     def test_should_convert_to_dict(self) -> None:
         """Test conversion of config to dictionary."""

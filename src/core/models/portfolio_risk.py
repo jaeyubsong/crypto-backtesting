@@ -9,8 +9,10 @@ from typing import TYPE_CHECKING
 
 from src.core.constants import DEFAULT_TAKER_FEE
 from src.core.enums import Symbol
-from src.core.exceptions.backtest import PositionNotFoundError, ValidationError
+from src.core.exceptions.backtest import PositionNotFoundError
 from src.core.utils.validation import validate_positive, validate_symbol
+
+from .portfolio_helpers import PortfolioValidator
 
 if TYPE_CHECKING:
     from .portfolio_core import PortfolioCore
@@ -71,13 +73,10 @@ class PortfolioRisk:
             ValidationError: If parameters are invalid
             PositionNotFoundError: If position doesn't exist
         """
-        # Validate inputs
-        if not symbol or not isinstance(symbol, Symbol):
-            raise ValidationError("Symbol must be a valid Symbol enum")
-        if close_price <= 0:
-            raise ValidationError("Close price must be positive")
-        if fee < 0:
-            raise ValidationError("Fee must be non-negative")
+        # Use centralized validator for parameter validation
+        symbol, close_price, fee = PortfolioValidator.validate_close_position_params(
+            symbol, close_price, fee
+        )
 
         if symbol not in self.core.positions:
             raise PositionNotFoundError(str(symbol))
@@ -107,12 +106,10 @@ class PortfolioRisk:
         Returns:
             True if position was closed successfully
         """
-        # Validate inputs
+        # Validate inputs using centralized validator
         symbol = validate_symbol(symbol)
         current_price = validate_positive(current_price, "current_price")
-        from src.core.utils.validation import validate_percentage
-
-        percentage = validate_percentage(percentage)
+        percentage = PortfolioValidator.validate_percentage(percentage, "position close percentage")
 
         if symbol not in self.core.positions:
             return False
