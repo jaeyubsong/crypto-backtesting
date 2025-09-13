@@ -304,13 +304,14 @@ The platform calculates comprehensive performance metrics:
 
 - **SOLID Principles**: Strictly enforced across all modules
 - **Type Safety**: Full type hints with mypy strict mode
-- **File Limits**: Maximum 300 lines per file
+- **File Guidelines**: Target 150-200 lines per class, maximum 300 lines (business justification required for exceptions)
 - **Function Limits**: Maximum 30 lines per function
 - **Documentation**: Docstrings required on all public APIs
 - **Test Coverage**: Minimum 80% overall, 90%+ for core logic
 - **TDD Mandatory**: Tests written FIRST for all business logic
 - **Import Rules**: Core layer has NO external dependencies
 - **Validation**: All inputs validated at boundaries
+- **Design Focus**: Single Responsibility Principle drives class splitting decisions
 
 ## 📝 License
 

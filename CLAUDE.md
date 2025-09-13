@@ -123,11 +123,34 @@ src/
 ```
 
 **Module Rules:**
-- **Maximum file size**: 300 lines (split if larger)
-- **Maximum function size**: 30 lines (extract if larger)
-- **Maximum class size**: 150 lines (decompose if larger)
-- **Maximum function parameters**: 5 (use data classes if more needed)
-- **Maximum cyclomatic complexity**: 10 (simplify if higher)
+- **File Size Guidelines:**
+  - **Target**: 150-200 lines per class (optimal for readability)
+  - **Standard Maximum**: 300 lines (requires splitting if exceeded)
+  - **Exception Process**: 300-400 lines allowed with documented business rationale
+  - **Hard Limit**: 500 lines (requires architectural review and approval)
+- **Function Guidelines:**
+  - **Maximum function size**: 30 lines (extract if larger)
+  - **Maximum function parameters**: 5 (use data classes if more needed)
+  - **Maximum cyclomatic complexity**: 10 (simplify if higher)
+- **Class Guidelines:**
+  - **Target class size**: 150 lines (single responsibility focus)
+  - **Maximum methods per class**: 15-20 (consider splitting if exceeded)
+  - **Single Responsibility**: Each class should have one reason to change
+
+**When to Split Classes/Files:**
+- Multiple responsibilities (violates Single Responsibility Principle)
+- Difficult to explain class purpose in one sentence
+- Complex test setup requirements across different concerns
+- Method count exceeds 15-20
+- Related methods cluster into distinct business concepts
+- Code review difficulty due to size
+
+**Exception Criteria for Larger Files (300-400 lines):**
+- Tightly coupled business logic that benefits from being together
+- Complex domain calculations that form a cohesive unit
+- State machines or workflow engines with related state transitions
+- Must document rationale and get peer review approval
+- Higher testing standards required (95%+ coverage)
 
 **Import Rules:**
 - Core layer: NO external dependencies
@@ -306,7 +329,7 @@ Before submitting any code, ensure:
 - [ ] Code coverage >= 80% overall
 - [ ] No linting errors
 - [ ] SOLID principles followed
-- [ ] No files > 300 lines
+- [ ] All files follow size guidelines (target ≤ 200 lines, max 300 without exception approval)
 - [ ] No functions > 30 lines
 - [ ] No circular dependencies
 - [ ] Type hints on all functions
