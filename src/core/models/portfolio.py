@@ -7,11 +7,13 @@ components: core state, trading operations, risk management, and metrics.
 
 from collections import deque
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from src.core.enums import Symbol, TradingMode
 from src.core.interfaces.portfolio import IPortfolio
 from src.core.models.position import Position, Trade
+from src.core.types.financial import AmountFloat, PriceFloat
 
 from .portfolio_core import PortfolioCore
 from .portfolio_metrics import PortfolioMetrics
@@ -33,8 +35,8 @@ class Portfolio(IPortfolio):
 
     def __init__(
         self,
-        initial_capital: float,
-        cash: float,
+        initial_capital: AmountFloat,
+        cash: AmountFloat,
         positions: dict[Symbol, Position] | None = None,
         trades: deque[Trade] | None = None,
         portfolio_history: deque[dict[str, Any]] | None = None,

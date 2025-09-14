@@ -1,78 +1,133 @@
 """
 Position and Trade domain models.
-To be implemented in Phase 2.
+Enhanced with Decimal precision for financial calculations.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import ValidationError
+from src.core.types.financial import (
+    ZERO,
+    AmountFloat,
+    LeverageFloat,
+    PriceFloat,
+    calculate_pnl,
+    round_amount,
+    round_price,
+    to_decimal,
+)
 
 
 @dataclass
 class Position:
-    """Represents a trading position."""
+    """Represents a trading position with precise financial calculations.
+
+    Uses Decimal types for precise financial calculations to avoid
+    floating-point precision issues in trading operations.
+    """
 
     symbol: Symbol
-    size: float
-    entry_price: float
-    leverage: float
+    size: AmountFloat
+    entry_price: PriceFloat
+    leverage: LeverageFloat
     timestamp: datetime
     position_type: PositionType
-    margin_used: float
+    margin_used: AmountFloat
 
     def __post_init__(self) -> None:
-        """Validate position data after initialization."""
-        if self.entry_price <= 0:
+        """Validate and convert position data after initialization."""
+        # Convert all financial values to Decimal for precision
+        self.size = to_decimal(self.size)
+        self.entry_price = round_price(self.entry_price)
+        self.leverage = to_decimal(self.leverage)
+        self.margin_used = round_amount(self.margin_used)
+
+        # Validate position data
+        if self.entry_price <= ZERO:
             raise ValidationError(f"Entry price must be positive, got {self.entry_price}")
-        if self.leverage <= 0:
+        if self.leverage <= ZERO:
             raise ValidationError(f"Leverage must be positive, got {self.leverage}")
-        if self.margin_used < 0:
+        if self.margin_used < ZERO:
             raise ValidationError(f"Margin used must be non-negative, got {self.margin_used}")
 
-    def unrealized_pnl(self, current_price: float) -> float:
-        """Calculate unrealized PnL based on position type."""
-        if self.size == 0:
-            return 0.0
+    def unrealized_pnl(self, current_price: PriceFloat) -> Decimal:
+        """Calculate unrealized PnL based on position type with precision.
 
-        if self.position_type == PositionType.LONG:
-            return (current_price - self.entry_price) * abs(self.size)
-        else:  # short position
-            return (self.entry_price - current_price) * abs(self.size)
+        Args:
+            current_price: Current market price
 
-    def is_liquidation_risk(self, current_price: float, maintenance_margin_rate: float) -> bool:
-        """Check if position is at risk of liquidation."""
-        if self.size == 0:
+        Returns:
+            Unrealized PnL as Decimal for precise calculation
+        """
+        if self.size == ZERO:
+            return ZERO
+
+        current_price_decimal = round_price(current_price)
+
+        return calculate_pnl(
+            entry_price=self.entry_price,
+            exit_price=current_price_decimal,
+            amount=self.size,
+            position_type=self.position_type.value,
+        )
+
+    def is_liquidation_risk(
+        self, current_price: PriceFloat, maintenance_margin_rate: AmountFloat
+    ) -> bool:
+        """Check if position is at risk of liquidation with precise calculations.
+
+        Args:
+            current_price: Current market price
+            maintenance_margin_rate: Maintenance margin rate (e.g., 0.05 for 5%)
+
+        Returns:
+            True if position is at liquidation risk
+        """
+        if self.size == ZERO:
             return False
 
-        # Calculate unrealized loss
-        unrealized_pnl = self.unrealized_pnl(current_price)
+        # Convert to Decimal for precise calculations
+        current_price_decimal = round_price(current_price)
+        margin_rate = to_decimal(maintenance_margin_rate)
 
-        # Position value at entry
-        position_value = abs(self.size) * self.entry_price
+        # Calculate unrealized PnL with precision
+        unrealized_pnl = self.unrealized_pnl(current_price_decimal)
+
+        # Position value at entry with precise calculation
+        position_value = abs(float(self.size)) * float(self.entry_price)
 
         # Maintenance margin requirement
-        maintenance_margin = position_value * maintenance_margin_rate
+        maintenance_margin = round_amount(to_decimal(position_value) * margin_rate)
 
         # Available margin before liquidation
-        available_margin = self.margin_used - maintenance_margin
+        available_margin = to_decimal(self.margin_used) - maintenance_margin
 
         # Check if losses exceed available margin
         # Liquidation occurs when losses reduce equity below maintenance margin
         return unrealized_pnl <= -available_margin
 
-    def position_value(self, current_price: float) -> float:
-        """Calculate current position value at given price."""
-        return abs(self.size) * current_price
+    def position_value(self, current_price: PriceFloat) -> Decimal:
+        """Calculate current position value at given price with precision.
+
+        Args:
+            current_price: Current market price
+
+        Returns:
+            Position value as Decimal
+        """
+        current_price_decimal = round_price(current_price)
+        return round_amount(to_decimal(abs(float(self.size))) * current_price_decimal)
 
     @classmethod
     def create_long(
         cls,
         symbol: Symbol,
-        size: float,
-        entry_price: float,
-        leverage: float = 1.0,
+        size: AmountFloat,
+        entry_price: PriceFloat,
+        leverage: LeverageFloat = 1.0,
         timestamp: datetime | None = None,
         trading_mode: TradingMode = TradingMode.SPOT,
     ) -> "Position":
@@ -93,14 +148,16 @@ class Position:
             timestamp = datetime.now()
 
         # Ensure positive size for long position
-        position_size = abs(size)
+        position_size = abs(float(size))
 
         # Calculate margin used based on trading mode
-        margin_used = cls._calculate_margin_used(position_size, entry_price, leverage, trading_mode)
+        margin_used = cls._calculate_margin_used(
+            position_size, float(entry_price), float(leverage), trading_mode
+        )
 
         return cls(
             symbol=symbol,
-            size=position_size,
+            size=float(position_size),
             entry_price=entry_price,
             leverage=leverage,
             timestamp=timestamp,

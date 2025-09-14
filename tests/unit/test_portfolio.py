@@ -4,6 +4,7 @@ Following TDD approach - write failing tests first.
 """
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 
@@ -468,7 +469,7 @@ class TestPortfolioFuturesMode:
         # Equity = cash + unrealized_pnl = 5000 + (-2000) = 3000
         # Used margin = 5000
         # Ratio = 3000 / 5000 = 0.6
-        assert margin_ratio == 0.6
+        assert margin_ratio == Decimal("0.6")
 
     def test_should_detect_margin_call_risk_in_futures(self) -> None:
         """Test margin call detection in futures trading."""

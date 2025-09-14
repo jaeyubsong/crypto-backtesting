@@ -488,11 +488,61 @@ def test_should_[expected_behavior]_when_[condition]():
 - **Lint code**: `uv run ruff check`
 - **Fix linting issues**: `uv run ruff check --fix`
 - **Format code**: `uv run ruff format`
+- **Check code formatting**: `uv run ruff format --check`
+- **Type checking**: `uv run mypy src/ tests/`
 - **Run tests**: `uv run pytest`
 - **Run specific test**: `uv run pytest tests/test_file.py::test_function -v`
-- **Run tests with coverage**: `uv run pytest --cov`
+- **Run tests with coverage**: `uv run pytest --cov=src --cov-fail-under=80`
 - **Run tests in watch mode**: `uv run pytest-watch`
 - **Run pre-commit on all files**: `uv run pre-commit run --all-files`
+
+### 🚨 PRE-PUSH CI VALIDATION (MANDATORY)
+
+**CRITICAL**: Always run these commands locally BEFORE pushing to prevent CI failures:
+
+```bash
+# Complete CI validation pipeline (run all commands in sequence)
+uv run ruff check --output-format=github &&
+uv run ruff format --check &&
+uv run mypy src/ tests/ &&
+uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80
+```
+
+**Individual CI Steps** (for debugging specific failures):
+
+1. **Linting Check** (matches CI exactly):
+   ```bash
+   uv run ruff check --output-format=github
+   ```
+
+2. **Format Check** (matches CI exactly):
+   ```bash
+   uv run ruff format --check
+   ```
+
+3. **Type Checking** (matches CI exactly):
+   ```bash
+   uv run mypy src/ tests/
+   ```
+
+4. **Test Coverage** (matches CI exactly):
+   ```bash
+   uv run pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+   ```
+
+**Quick Fix Commands** (when CI steps fail):
+
+- **Fix linting issues**: `uv run ruff check --fix`
+- **Fix formatting**: `uv run ruff format`
+- **Fix common MyPy issues**: Add type annotations, fix imports
+- **Fix test coverage**: Add missing tests, remove dead code
+
+**CI Failure Debugging:**
+
+- **MyPy fails**: Most common issues are missing imports, type annotations, or Decimal/float compatibility
+- **Coverage fails**: Need ≥80% overall coverage - add tests for uncovered code
+- **Tests fail**: Check for import errors, missing test dependencies, or failing assertions
+- **Ruff fails**: Run `uv run ruff check --fix` and `uv run ruff format` to auto-fix most issues
 
 ### Package Management
 - **Add dependencies**: `uv add <package>`

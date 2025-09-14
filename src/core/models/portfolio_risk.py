@@ -5,11 +5,13 @@ This module handles liquidation detection, margin calls, and risk controls
 following the Single Responsibility Principle for risk management.
 """
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from src.core.constants import DEFAULT_TAKER_FEE
 from src.core.enums import Symbol
 from src.core.exceptions.backtest import PositionNotFoundError
+from src.core.types.financial import to_decimal, AmountFloat, PriceFloat
 from src.core.utils.validation import validate_positive, validate_symbol
 
 from .portfolio_helpers import PortfolioValidator
@@ -56,7 +58,7 @@ class PortfolioRisk:
 
         return at_risk_symbols
 
-    def close_position_at_price(self, symbol: Symbol, close_price: float, fee: float) -> float:
+    def close_position_at_price(self, symbol: Symbol, close_price: PriceFloat, fee: AmountFloat) -> Decimal:
         """Close a position at a specific price and return realized PnL.
 
         This is the original method for closing with known price.
@@ -83,7 +85,7 @@ class PortfolioRisk:
 
         position = self.core.positions[symbol]
         unrealized_pnl = position.unrealized_pnl(close_price)
-        realized_pnl = unrealized_pnl - fee
+        realized_pnl = unrealized_pnl - to_decimal(fee)
 
         # Release margin and add realized PnL
         self.core.cash += position.margin_used + realized_pnl
@@ -94,7 +96,7 @@ class PortfolioRisk:
         return realized_pnl
 
     def close_position(
-        self, symbol: Symbol, current_price: float, percentage: float = 100.0
+        self, symbol: Symbol, current_price: PriceFloat, percentage: AmountFloat = 100.0
     ) -> bool:
         """Close a position (partially or fully).
 
@@ -115,21 +117,23 @@ class PortfolioRisk:
             return False
 
         position = self.core.positions[symbol]
-        close_amount = position.size * (percentage / 100.0)
+        close_amount = position.size * (to_decimal(percentage) / to_decimal(100.0))
 
-        close_price = current_price
-        fee = close_amount * close_price * DEFAULT_TAKER_FEE
+        close_price = to_decimal(current_price)
+        fee = close_amount * close_price * to_decimal(DEFAULT_TAKER_FEE)
 
         if percentage >= 100:
             # Full close
             self.close_position_at_price(symbol, close_price, fee)
         else:
             # Partial close
-            partial_pnl = position.unrealized_pnl(close_price) * (percentage / 100.0) - fee
-            partial_margin = position.margin_used * (percentage / 100.0)
+            percentage_decimal = to_decimal(percentage) / to_decimal(100.0)
+            partial_pnl = position.unrealized_pnl(close_price) * percentage_decimal - fee
+            partial_margin = position.margin_used * percentage_decimal
 
-            position.size *= 1 - percentage / 100.0
-            position.margin_used *= 1 - percentage / 100.0
+            remaining_percentage = to_decimal(1) - percentage_decimal
+            position.size *= remaining_percentage
+            position.margin_used *= remaining_percentage
             self.core.cash += partial_margin + partial_pnl
 
         return True

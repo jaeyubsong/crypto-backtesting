@@ -6,9 +6,11 @@ between domain models while maintaining type safety.
 """
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Protocol
 
 from src.core.enums import PositionType, Symbol
+from src.core.types.financial import AmountFloat, LeverageFloat, PriceFloat
 
 
 class IPosition(Protocol):
@@ -19,22 +21,24 @@ class IPosition(Protocol):
     """
 
     symbol: Symbol
-    size: float
-    entry_price: float
-    leverage: float
+    size: AmountFloat
+    entry_price: PriceFloat
+    leverage: LeverageFloat
     timestamp: datetime
     position_type: PositionType
-    margin_used: float
+    margin_used: AmountFloat
 
-    def unrealized_pnl(self, current_price: float) -> float:
+    def unrealized_pnl(self, current_price: PriceFloat) -> Decimal:
         """Calculate unrealized PnL at current price."""
         ...
 
-    def is_liquidation_risk(self, current_price: float, maintenance_margin_rate: float) -> bool:
+    def is_liquidation_risk(
+        self, current_price: PriceFloat, maintenance_margin_rate: AmountFloat
+    ) -> bool:
         """Check if position is at liquidation risk."""
         ...
 
-    def position_value(self, current_price: float) -> float:
+    def position_value(self, current_price: PriceFloat) -> Decimal:
         """Calculate position value at current price."""
         ...
 

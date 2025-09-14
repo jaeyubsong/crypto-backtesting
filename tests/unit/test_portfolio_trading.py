@@ -5,6 +5,7 @@ Testing buy/sell operations and trade execution logic following TDD principles.
 
 from collections import deque
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 
@@ -38,12 +39,12 @@ class TestPortfolioTradingBuyOperations:
         assert result is True
         assert Symbol.BTC in core.positions
         position = core.positions[Symbol.BTC]
-        assert position.size == 0.1
-        assert position.entry_price == 50000.0
+        assert position.size == Decimal("0.1")
+        assert position.entry_price == Decimal("50000.00")
         assert position.position_type == PositionType.LONG
-        assert position.leverage == 1.0
-        assert position.margin_used == 5000.0  # 0.1 * 50000 / 1
-        assert core.cash == 5000.0  # 10000 - 5000
+        assert position.leverage == Decimal("1.0")
+        assert position.margin_used == Decimal("5000.00000000")  # 0.1 * 50000 / 1
+        assert core.cash == Decimal("5000.00000000")  # 10000 - 5000
         assert len(core.trades) == 1
 
     def test_should_execute_buy_order_new_long_position_futures(self) -> None:

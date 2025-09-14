@@ -4,10 +4,11 @@ Testing that protocols work correctly and type aliases are valid.
 """
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from src.core.enums import ActionType, PositionType, Symbol
 from src.core.models.position import Position, Trade
-from src.core.types import IPosition, ITrade, PositionDict, PriceDict
+from src.core.protocols import IPosition, ITrade, PositionDict, PriceDict
 
 
 class TestProtocolCompliance:
@@ -42,13 +43,13 @@ class TestProtocolCompliance:
 
         # Test method calls
         pnl = position.unrealized_pnl(52000.0)
-        assert isinstance(pnl, float)
+        assert isinstance(pnl, Decimal)
 
         risk = position.is_liquidation_risk(45000.0, 0.05)
         assert isinstance(risk, bool)
 
         value = position.position_value(52000.0)
-        assert isinstance(value, float)
+        assert isinstance(value, Decimal)
 
     def test_trade_implements_itrade_protocol(self) -> None:
         """Test that Trade class correctly implements ITrade protocol."""
@@ -96,12 +97,12 @@ class TestProtocolCompliance:
         )
 
         # Act - function that accepts IPosition protocol
-        def process_position(pos: IPosition) -> float:
+        def process_position(pos: IPosition) -> Decimal:
             return pos.unrealized_pnl(3100.0)
 
         # Assert - Position should work as IPosition
         result = process_position(position)
-        assert isinstance(result, float)
+        assert isinstance(result, Decimal)
 
     def test_itrade_protocol_type_checking(self) -> None:
         """Test that ITrade protocol enables proper type checking."""
@@ -185,9 +186,9 @@ class TestTypeAliases:
         """Test that type aliases work in function signatures."""
 
         # Arrange
-        def calculate_portfolio_value(positions: PositionDict, prices: PriceDict) -> float:
+        def calculate_portfolio_value(positions: PositionDict, prices: PriceDict) -> Decimal:
             """Example function using type aliases."""
-            total_value = 0.0
+            total_value = Decimal("0.0")
             for symbol, position in positions.items():
                 if symbol in prices:
                     total_value += position.position_value(prices[symbol])
@@ -210,7 +211,7 @@ class TestTypeAliases:
         result = calculate_portfolio_value(positions, prices)
 
         # Assert
-        assert isinstance(result, float)
+        assert isinstance(result, Decimal)
         assert result > 0
 
 

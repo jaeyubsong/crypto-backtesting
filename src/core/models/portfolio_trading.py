@@ -6,12 +6,14 @@ following the Single Responsibility Principle for trading logic.
 """
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from src.core.constants import DEFAULT_TAKER_FEE
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import InsufficientFundsError
 from src.core.models.position import Position, Trade
+from src.core.types.financial import to_decimal, AmountFloat, PriceFloat
 
 from .portfolio_helpers import (
     FeeCalculator,
@@ -38,7 +40,7 @@ class PortfolioTrading:
         """
         self.core = portfolio_core
 
-    def buy(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
+    def buy(self, symbol: Symbol, amount: AmountFloat, price: PriceFloat, leverage: AmountFloat = 1.0) -> bool:
         """Execute a buy order.
 
         - For SPOT: Buy asset (open long position)
@@ -85,7 +87,7 @@ class PortfolioTrading:
 
             return True
 
-    def sell(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
+    def sell(self, symbol: Symbol, amount: AmountFloat, price: PriceFloat, leverage: AmountFloat = 1.0) -> bool:
         """Execute a sell order.
 
         - For SPOT: Sell asset (close long position)

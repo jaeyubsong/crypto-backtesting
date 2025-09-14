@@ -5,6 +5,7 @@ Testing liquidation detection, position closure, and risk management following T
 
 from collections import deque
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 
@@ -505,7 +506,7 @@ class TestPortfolioRiskEdgeCases:
 
         # Assert - should handle gracefully
         assert Symbol.BTC not in core.positions
-        assert realized_pnl == 0.45  # (55000 - 50000) * 0.0001 - 0.05 = 0.5 - 0.05
+        assert realized_pnl == Decimal("0.45000000")  # (55000 - 50000) * 0.0001 - 0.05 = 0.5 - 0.05
 
     def test_should_handle_extreme_leverage_positions(self) -> None:
         """Test handling positions with very high leverage."""
