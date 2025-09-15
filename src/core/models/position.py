@@ -13,7 +13,6 @@ from src.core.types.financial import (
     calculate_pnl,
     round_amount,
     round_price,
-    to_float,
 )
 
 
@@ -34,11 +33,9 @@ class Position:
 
     def __post_init__(self) -> None:
         """Validate and normalize position data after initialization."""
-        # Convert and round financial values
-        self.size = to_float(self.size)
-        self.entry_price = round_price(to_float(self.entry_price))
-        self.leverage = to_float(self.leverage)
-        self.margin_used = round_amount(to_float(self.margin_used))
+        # Round financial values (no conversion needed - already float)
+        self.entry_price = round_price(self.entry_price)
+        self.margin_used = round_amount(self.margin_used)
 
         # Validate position data
         if self.entry_price <= ZERO:
@@ -60,7 +57,7 @@ class Position:
         if self.size == ZERO:
             return ZERO
 
-        current_price_rounded = round_price(to_float(current_price))
+        current_price_rounded = round_price(current_price)
 
         return calculate_pnl(
             entry_price=self.entry_price,
@@ -83,14 +80,20 @@ class Position:
             return False
 
         # Round current price for consistency
-        current_price_rounded = round_price(to_float(current_price))
-        margin_rate = to_float(maintenance_margin_rate)
+        current_price_rounded = round_price(current_price)
+        margin_rate = maintenance_margin_rate
 
-        # Calculate unrealized PnL
+        # Calculate unrealized PnL with validation
         unrealized_pnl = self.unrealized_pnl(current_price_rounded)
+
+        # Validate liquidation calculation inputs
+        from src.core.types.financial import validate_safe_float_range
+
+        validate_safe_float_range(unrealized_pnl, "unrealized_pnl in liquidation check")
 
         # Position value at entry
         position_value = abs(self.size) * self.entry_price
+        validate_safe_float_range(position_value, "position_value in liquidation check")
 
         # Maintenance margin requirement
         maintenance_margin = round_amount(position_value * margin_rate)
@@ -111,7 +114,7 @@ class Position:
         Returns:
             Position value as float
         """
-        current_price_rounded = round_price(to_float(current_price))
+        current_price_rounded = round_price(current_price)
         return round_amount(abs(self.size) * current_price_rounded)
 
     @classmethod

@@ -122,7 +122,7 @@ def calculate_pnl(
     amount: float,
     position_type: str,
 ) -> float:
-    """Calculate PnL with proper precision.
+    """Calculate PnL with proper precision and validation.
 
     Args:
         entry_price: Entry price of position
@@ -132,7 +132,15 @@ def calculate_pnl(
 
     Returns:
         PnL as float
+
+    Raises:
+        ValueError: If inputs are invalid or results exceed safe range
     """
+    # Validate inputs are within safe calculation range
+    validate_safe_float_range(entry_price, "entry_price in PnL calculation")
+    validate_safe_float_range(exit_price, "exit_price in PnL calculation")
+    validate_safe_float_range(amount, "amount in PnL calculation")
+
     amt = abs(amount)
     position_type_upper = position_type.upper()
 
@@ -142,6 +150,9 @@ def calculate_pnl(
         pnl = (entry_price - exit_price) * amt
     else:
         raise ValueError(f"Invalid position type: {position_type}")
+
+    # Validate result is within safe range
+    validate_safe_float_range(pnl, "PnL calculation result")
 
     return round_amount(pnl)
 
