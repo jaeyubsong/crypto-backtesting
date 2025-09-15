@@ -8,13 +8,13 @@ from decimal import Decimal
 
 import pytest
 
-from src.core.enums import ActionType, PositionType, Symbol, TradingMode
+from src.core.enums import PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import (
     InsufficientFundsError,
     PositionNotFoundError,
 )
 from src.core.models.portfolio import Portfolio
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
 
 
 class TestPortfolioBasics:

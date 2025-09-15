@@ -138,7 +138,7 @@ class TestPortfolioGetterMethods:
         )
 
         # Margin ratio = used_margin / initial_capital = 5000 / 100000 = 0.05
-        assert portfolio.get_margin_ratio() == Decimal("0.05")
+        assert portfolio.get_margin_ratio() == 0.05
 
     def test_should_get_margin_ratio_zero_when_no_positions(self) -> None:
         """Test get_margin_ratio returns 0 when no positions."""

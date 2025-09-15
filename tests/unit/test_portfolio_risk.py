@@ -220,13 +220,13 @@ class TestPortfolioRiskPositionClosure:
         risk_manager = PortfolioRisk(core)
 
         # Act - close at profit
-        close_price = 55000.0
-        fee = 27.5
+        close_price = Decimal("55000.0")
+        fee = Decimal("27.5")
         realized_pnl = risk_manager.close_position_at_price(Symbol.BTC, close_price, fee)
 
         # Assert
         # PnL = (55000 - 50000) * 1.0 - 27.5 = 5000 - 27.5 = 4972.5
-        assert realized_pnl == 4972.5
+        assert realized_pnl == Decimal("4972.5")
         assert Symbol.BTC not in core.positions
         # Cash = original 5000 + margin 5000 + pnl 4972.5 = 14972.5
         assert core.cash == 14972.5

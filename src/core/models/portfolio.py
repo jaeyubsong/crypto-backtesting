@@ -176,6 +176,8 @@ class Portfolio(IPortfolio):
 
     def get_unrealized_pnl(self, symbol: Symbol, current_price: float) -> float:
         """Get unrealized PnL for a specific position."""
+        from src.core.utils.validation import validate_positive
+        validate_positive(current_price, "current_price")
         return self._metrics.get_unrealized_pnl(symbol, to_decimal(current_price))
 
     def get_leverage(self, symbol: Symbol) -> float:

@@ -62,7 +62,7 @@ class Position:
         if self.size == ZERO:
             return ZERO
 
-        current_price_decimal = round_price(current_price)
+        current_price_decimal = round_price(to_decimal(current_price))
 
         return calculate_pnl(
             entry_price=self.entry_price,
@@ -85,7 +85,7 @@ class Position:
             return False
 
         # Convert to Decimal for precise calculations
-        current_price_decimal = round_price(current_price)
+        current_price_decimal = round_price(to_decimal(current_price))
         margin_rate = to_decimal(maintenance_margin_rate)
 
         # Calculate unrealized PnL with precision
@@ -113,7 +113,7 @@ class Position:
         Returns:
             Position value as Decimal
         """
-        current_price_decimal = round_price(current_price)
+        current_price_decimal = round_price(to_decimal(current_price))
         return round_amount(to_decimal(abs(float(self.size))) * current_price_decimal)
 
     @classmethod
