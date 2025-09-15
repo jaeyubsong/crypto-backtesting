@@ -12,7 +12,6 @@ from typing import Any
 from src.core.enums import Symbol, TradingMode
 from src.core.interfaces.portfolio import IPortfolio
 from src.core.models.position import Position, Trade
-from src.core.types.financial import to_float
 
 from .portfolio_core import PortfolioCore
 from .portfolio_metrics import PortfolioMetrics
@@ -54,9 +53,9 @@ class Portfolio(IPortfolio):
         if portfolio_history is None:
             portfolio_history = deque()
 
-        # Convert float inputs to float for internal use
-        initial_capital_decimal = to_float(initial_capital)
-        cash_decimal = to_float(cash)
+        # Use float inputs directly - no conversion needed
+        initial_capital_decimal = initial_capital
+        cash_decimal = cash
 
         # Create the core state manager first - single source of truth
         self._core = PortfolioCore(
@@ -86,7 +85,7 @@ class Portfolio(IPortfolio):
     @cash.setter
     def cash(self, value: float) -> None:
         """Set cash value (delegates to core)."""
-        self._core.cash = to_float(value)
+        self._core.cash = value
 
     @property
     def positions(self) -> dict[Symbol, Position]:
@@ -131,13 +130,12 @@ class Portfolio(IPortfolio):
         self, symbol: Symbol, current_price: float, percentage: float = 100.0
     ) -> bool:
         """Close a position."""
-        return self._risk.close_position(symbol, to_float(current_price), to_float(percentage))
+        return self._risk.close_position(symbol, current_price, percentage)
 
     def calculate_portfolio_value(self, current_prices: dict[Symbol, float]) -> float:
         """Calculate total portfolio value."""
-        # Convert float prices to float for internal calculations
-        decimal_prices = {symbol: to_float(price) for symbol, price in current_prices.items()}
-        result = self._metrics.calculate_portfolio_value(decimal_prices)
+        # Use float prices directly - no conversion needed
+        result = self._metrics.calculate_portfolio_value(current_prices)
         return float(result)
 
     def available_margin(self) -> float:
@@ -150,18 +148,16 @@ class Portfolio(IPortfolio):
 
     def margin_ratio(self, current_prices: dict[Symbol, float]) -> float:
         """Calculate margin ratio."""
-        # Convert float prices to float for internal calculations
-        decimal_prices = {symbol: to_float(price) for symbol, price in current_prices.items()}
-        result = self._metrics.margin_ratio(decimal_prices)
+        # Use float prices directly - no conversion needed
+        result = self._metrics.margin_ratio(current_prices)
         return float(result)
 
     def check_liquidation(
         self, current_prices: dict[Symbol, float], maintenance_margin_rate: float = 0.05
     ) -> list[Symbol]:
         """Check and return symbols at risk of liquidation."""
-        # Convert float prices to float for internal calculations
-        decimal_prices = {symbol: to_float(price) for symbol, price in current_prices.items()}
-        return self._risk.check_liquidation(decimal_prices, to_float(maintenance_margin_rate))
+        # Use float prices directly - no conversion needed
+        return self._risk.check_liquidation(current_prices, maintenance_margin_rate)
 
     # Strategy API Methods (PRD Section 3.2)
     def get_position_size(self, symbol: Symbol) -> float:
@@ -182,7 +178,7 @@ class Portfolio(IPortfolio):
         from src.core.utils.validation import validate_positive
 
         validate_positive(current_price, "current_price")
-        return self._metrics.get_unrealized_pnl(symbol, to_float(current_price))
+        return self._metrics.get_unrealized_pnl(symbol, current_price)
 
     def get_leverage(self, symbol: Symbol) -> float:
         """Get current leverage for a position."""
@@ -190,9 +186,8 @@ class Portfolio(IPortfolio):
 
     def record_snapshot(self, timestamp: datetime, current_prices: dict[Symbol, float]) -> None:
         """Record portfolio state at given timestamp."""
-        # Convert float prices to float for internal storage
-        decimal_prices = {symbol: to_float(price) for symbol, price in current_prices.items()}
-        self._core.record_snapshot(timestamp, decimal_prices)
+        # Use float prices directly - no conversion needed
+        self._core.record_snapshot(timestamp, current_prices)
 
     # Additional utility methods
     def realized_pnl(self) -> float:
@@ -202,18 +197,16 @@ class Portfolio(IPortfolio):
 
     def unrealized_pnl(self, current_prices: dict[Symbol, float]) -> float:
         """Calculate total unrealized PnL from all positions."""
-        # Convert float prices to float for internal calculations
-        decimal_prices = {symbol: to_float(price) for symbol, price in current_prices.items()}
-        result = self._core.unrealized_pnl(decimal_prices)
+        # Use float prices directly - no conversion needed
+        result = self._core.unrealized_pnl(current_prices)
         return float(result)
 
     def is_margin_call(
         self, current_prices: dict[Symbol, float], margin_call_threshold: float = 0.5
     ) -> bool:
         """Check if portfolio is at risk of margin call."""
-        # Convert float prices to float for internal calculations
-        decimal_prices = {symbol: to_float(price) for symbol, price in current_prices.items()}
-        return self._metrics.is_margin_call(decimal_prices, to_float(margin_call_threshold))
+        # Use float prices directly - no conversion needed
+        return self._metrics.is_margin_call(current_prices, margin_call_threshold)
 
     # Additional methods needed by tests and external code
     def add_position(self, position: Position) -> None:
@@ -222,5 +215,5 @@ class Portfolio(IPortfolio):
 
     def close_position_at_price(self, symbol: Symbol, close_price: float, fee: float) -> float:
         """Close a position at a specific price and return realized PnL."""
-        result = self._risk.close_position_at_price(symbol, to_float(close_price), to_float(fee))
+        result = self._risk.close_position_at_price(symbol, close_price, fee)
         return float(result)

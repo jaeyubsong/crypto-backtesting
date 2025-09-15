@@ -18,8 +18,8 @@ from src.core.constants import (
 )
 from src.core.enums import Symbol, TradingMode
 from src.core.models.position import Position, Trade
-from src.core.types.financial import to_float
 
+# to_float import removed - no longer needed for float-to-float conversions
 from .portfolio_helpers import PortfolioValidator
 
 
@@ -46,9 +46,9 @@ class PortfolioCore:
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        """Convert financial values to float."""
-        self.initial_capital = to_float(self.initial_capital)
-        self.cash = to_float(self.cash)
+        """Financial values are already float - no conversion needed."""
+        # Values are already float type, no conversion needed
+        pass
 
     def available_margin(self) -> float:
         """Calculate available margin for new positions."""
