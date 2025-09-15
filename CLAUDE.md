@@ -68,10 +68,45 @@ docs: Update [documentation]
 chore: Update dependencies/configuration
 ```
 
-**Run before EVERY commit:**
+## 🚨 CRITICAL: Quality Gates Before Every Commit/Push
+
+**MANDATORY: Run complete CI validation pipeline before EVERY commit and push:**
+
 ```bash
-uv run pytest  # All tests must pass
-uv run ruff check --fix  # Fix linting issues
+# Complete CI validation pipeline - ALL must pass before committing
+uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80 &&
+uv run ruff check --output-format=github &&
+uv run ruff format --check &&
+uv run mypy src/ tests/
+
+# If all pass, then commit
+git add . && git commit -m "your message"
+
+# Verify CI will pass before pushing
+git push origin your-branch
+```
+
+**🚫 NEVER push if any of these fail:**
+- Tests failing (even 1 test)
+- MyPy type errors
+- Ruff linting errors
+- Coverage below 80%
+
+**Why this matters:**
+- Failed CI wastes team time and blocks other developers
+- Type errors indicate potential runtime bugs
+- Test failures mean broken functionality
+- Poor coverage means insufficient testing
+
+**Quick fix commands:**
+```bash
+# Fix most issues automatically
+uv run ruff check --fix
+uv run ruff format
+
+# Check specific failures
+uv run pytest -x --tb=short  # Stop on first failure
+uv run mypy src/ tests/ | head -20  # Show first 20 type errors
 ```
 
 ### 3. SOLID Principles
