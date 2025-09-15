@@ -30,12 +30,16 @@ class Portfolio(IPortfolio):
     - PortfolioMetrics: Calculations and metrics
 
     This design follows the Single Responsibility Principle and Composition pattern.
+
+    Thread Safety:
+        All operations are thread-safe through the PortfolioCore's RLock implementation.
+        Multiple threads can safely read/write portfolio state concurrently.
     """
 
     def __init__(
         self,
-        initial_capital: float | float,
-        cash: float | float,
+        initial_capital: float,
+        cash: float,
         positions: dict[Symbol, Position] | None = None,
         trades: deque[Trade] | None = None,
         portfolio_history: deque[dict[str, Any]] | None = None,

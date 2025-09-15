@@ -257,7 +257,18 @@ class Position:
 
         Returns:
             Margin amount required
+
+        Raises:
+            ValidationError: If inputs are invalid
         """
+        # Input validation
+        if size <= ZERO:
+            raise ValidationError(f"Position size must be positive, got {size}")
+        if price <= ZERO:
+            raise ValidationError(f"Entry price must be positive, got {price}")
+        if leverage <= ZERO:
+            raise ValidationError(f"Leverage must be positive, got {leverage}")
+
         notional_value = size * price
 
         if trading_mode == TradingMode.SPOT:
