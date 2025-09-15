@@ -19,12 +19,12 @@ class TestProtocolCompliance:
         # Arrange
         position = Position(
             symbol=Symbol.BTC,
-            size=1.0,
-            entry_price=50000.0,
-            leverage=10.0,
+            size=Decimal("1.0"),
+            entry_price=Decimal("50000.0"),
+            leverage=Decimal("10.0"),
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=5000.0,
+            margin_used=Decimal("5000.0"),
         )
 
         # Act & Assert - verify all protocol attributes exist
@@ -42,13 +42,13 @@ class TestProtocolCompliance:
         assert hasattr(position, "position_value")
 
         # Test method calls
-        pnl = position.unrealized_pnl(52000.0)
+        pnl = position.unrealized_pnl(Decimal("52000.0"))
         assert isinstance(pnl, Decimal)
 
-        risk = position.is_liquidation_risk(45000.0, 0.05)
+        risk = position.is_liquidation_risk(Decimal("45000.0"), Decimal("0.05"))
         assert isinstance(risk, bool)
 
-        value = position.position_value(52000.0)
+        value = position.position_value(Decimal("52000.0"))
         assert isinstance(value, Decimal)
 
     def test_trade_implements_itrade_protocol(self) -> None:
@@ -88,17 +88,17 @@ class TestProtocolCompliance:
         # Arrange
         position = Position(
             symbol=Symbol.ETH,
-            size=5.0,
-            entry_price=3000.0,
-            leverage=5.0,
+            size=Decimal("5.0"),
+            entry_price=Decimal("3000.0"),
+            leverage=Decimal("5.0"),
             timestamp=datetime.now(UTC),
             position_type=PositionType.SHORT,
-            margin_used=3000.0,
+            margin_used=Decimal("3000.0"),
         )
 
         # Act - function that accepts IPosition protocol
         def process_position(pos: IPosition) -> Decimal:
-            return pos.unrealized_pnl(3100.0)
+            return pos.unrealized_pnl(Decimal("3100.0"))
 
         # Assert - Position should work as IPosition
         result = process_position(position)
@@ -136,27 +136,27 @@ class TestTypeAliases:
         """Test PriceDict type alias works correctly."""
         # Arrange & Act
         prices: PriceDict = {
-            Symbol.BTC: 50000.0,
-            Symbol.ETH: 3000.0,
+            Symbol.BTC: Decimal("50000.0"),
+            Symbol.ETH: Decimal("3000.0"),
         }
 
         # Assert - should work as dict[Symbol, float]
         assert isinstance(prices, dict)
         assert Symbol.BTC in prices
-        assert prices[Symbol.BTC] == 50000.0
-        assert prices[Symbol.ETH] == 3000.0
+        assert prices[Symbol.BTC] == Decimal("50000.0")
+        assert prices[Symbol.ETH] == Decimal("3000.0")
 
     def test_position_dict_type_alias(self) -> None:
         """Test PositionDict type alias works correctly."""
         # Arrange
         btc_position = Position(
             symbol=Symbol.BTC,
-            size=1.0,
-            entry_price=50000.0,
-            leverage=10.0,
+            size=Decimal("1.0"),
+            entry_price=Decimal("50000.0"),
+            leverage=Decimal("10.0"),
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=5000.0,
+            margin_used=Decimal("5000.0"),
         )
 
         eth_position = Position(
@@ -205,7 +205,7 @@ class TestTypeAliases:
         )
 
         positions: PositionDict = {Symbol.BTC: btc_position}
-        prices: PriceDict = {Symbol.BTC: 52000.0}
+        prices: PriceDict = {Symbol.BTC: Decimal("52000.0")}
 
         # Act
         result = calculate_portfolio_value(positions, prices)
@@ -242,11 +242,19 @@ class TestProtocolContractVerification:
         )
 
         # Act & Assert - unrealized_pnl contract
-        long_pnl_profit = long_position.unrealized_pnl(52000.0)  # Price up = profit for long
-        long_pnl_loss = long_position.unrealized_pnl(48000.0)  # Price down = loss for long
+        long_pnl_profit = long_position.unrealized_pnl(
+            Decimal("52000.0")
+        )  # Price up = profit for long
+        long_pnl_loss = long_position.unrealized_pnl(
+            Decimal("48000.0")
+        )  # Price down = loss for long
 
-        short_pnl_profit = short_position.unrealized_pnl(2800.0)  # Price down = profit for short
-        short_pnl_loss = short_position.unrealized_pnl(3200.0)  # Price up = loss for short
+        short_pnl_profit = short_position.unrealized_pnl(
+            Decimal("2800.0")
+        )  # Price down = profit for short
+        short_pnl_loss = short_position.unrealized_pnl(
+            Decimal("3200.0")
+        )  # Price up = loss for short
 
         assert long_pnl_profit > 0
         assert long_pnl_loss < 0
@@ -254,8 +262,8 @@ class TestProtocolContractVerification:
         assert short_pnl_loss < 0
 
         # position_value contract
-        long_value = long_position.position_value(52000.0)
-        short_value = short_position.position_value(2800.0)
+        long_value = long_position.position_value(Decimal("52000.0"))
+        short_value = short_position.position_value(Decimal("2800.0"))
 
         assert long_value > 0
         assert short_value > 0  # Value should always be positive (absolute position value)

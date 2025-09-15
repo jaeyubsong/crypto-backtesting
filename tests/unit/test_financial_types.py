@@ -72,7 +72,7 @@ class TestFinancialRounding:
     def test_should_round_price_to_two_decimals(self) -> None:
         """Test price rounding to 2 decimal places."""
         # Act
-        result = round_price(50000.123456)
+        result = round_price(Decimal("50000.123456"))
 
         # Assert
         assert result == Decimal("50000.12")
@@ -81,7 +81,7 @@ class TestFinancialRounding:
     def test_should_round_amount_to_eight_decimals(self) -> None:
         """Test amount rounding to 8 decimal places."""
         # Act
-        result = round_amount(1.123456789012345)
+        result = round_amount(Decimal("1.123456789012345"))
 
         # Assert
         assert result == Decimal("1.12345679")
@@ -90,7 +90,7 @@ class TestFinancialRounding:
     def test_should_round_percentage_to_four_decimals(self) -> None:
         """Test percentage rounding to 4 decimal places."""
         # Act
-        result = round_percentage(15.123456789)
+        result = round_percentage(Decimal("15.123456789"))
 
         # Assert
         assert result == Decimal("15.1235")
@@ -117,7 +117,7 @@ class TestFinancialCalculations:
     def test_should_calculate_notional_value(self) -> None:
         """Test notional value calculation with precision."""
         # Act
-        result = calculate_notional_value(1.5, 50000.0)
+        result = calculate_notional_value(Decimal("1.5"), Decimal("50000.0"))
 
         # Assert
         assert result == Decimal("75000.00000000")
@@ -126,7 +126,7 @@ class TestFinancialCalculations:
     def test_should_calculate_margin_needed_with_leverage(self) -> None:
         """Test margin calculation with leverage."""
         # Act
-        result = calculate_margin_needed(75000.0, 5.0)
+        result = calculate_margin_needed(Decimal("75000.0"), Decimal("5.0"))
 
         # Assert
         assert result == Decimal("15000.00000000")
@@ -136,19 +136,22 @@ class TestFinancialCalculations:
         """Test that zero leverage raises error."""
         # Act & Assert
         with pytest.raises(ValueError, match="Leverage must be positive"):
-            calculate_margin_needed(75000.0, 0.0)
+            calculate_margin_needed(Decimal("75000.0"), Decimal("0.0"))
 
     def test_should_raise_error_for_negative_leverage(self) -> None:
         """Test that negative leverage raises error."""
         # Act & Assert
         with pytest.raises(ValueError, match="Leverage must be positive"):
-            calculate_margin_needed(75000.0, -2.0)
+            calculate_margin_needed(Decimal("75000.0"), Decimal("-2.0"))
 
     def test_should_calculate_long_position_pnl(self) -> None:
         """Test PnL calculation for long position."""
         # Act
         result = calculate_pnl(
-            entry_price=50000.0, exit_price=52000.0, amount=1.5, position_type="LONG"
+            entry_price=Decimal("50000.0"),
+            exit_price=Decimal("52000.0"),
+            amount=Decimal("1.5"),
+            position_type="LONG",
         )
 
         # Assert
@@ -159,7 +162,10 @@ class TestFinancialCalculations:
         """Test PnL calculation for short position."""
         # Act
         result = calculate_pnl(
-            entry_price=50000.0, exit_price=48000.0, amount=1.0, position_type="SHORT"
+            entry_price=Decimal("50000.0"),
+            exit_price=Decimal("48000.0"),
+            amount=Decimal("1.0"),
+            position_type="SHORT",
         )
 
         # Assert
@@ -170,7 +176,10 @@ class TestFinancialCalculations:
         """Test negative PnL calculation for long position loss."""
         # Act
         result = calculate_pnl(
-            entry_price=50000.0, exit_price=48000.0, amount=1.0, position_type="LONG"
+            entry_price=Decimal("50000.0"),
+            exit_price=Decimal("48000.0"),
+            amount=Decimal("1.0"),
+            position_type="LONG",
         )
 
         # Assert
@@ -181,9 +190,9 @@ class TestFinancialCalculations:
         """Test that PnL calculation uses absolute amount."""
         # Act
         result = calculate_pnl(
-            entry_price=50000.0,
-            exit_price=52000.0,
-            amount=-1.5,  # Negative amount
+            entry_price=Decimal("50000.0"),
+            exit_price=Decimal("52000.0"),
+            amount=Decimal("-1.5"),  # Negative amount
             position_type="LONG",
         )
 
@@ -195,7 +204,7 @@ class TestFinancialCalculations:
         """Test that invalid position type raises error."""
         # Act & Assert
         with pytest.raises(ValueError, match="Invalid position type"):
-            calculate_pnl(50000.0, 52000.0, 1.0, "INVALID")
+            calculate_pnl(Decimal("50000.0"), Decimal("52000.0"), Decimal("1.0"), "INVALID")
 
 
 class TestFinancialPrecision:

@@ -7,18 +7,8 @@ in financial calculations, which is critical for trading applications.
 
 from decimal import ROUND_HALF_UP, Decimal
 
-# Financial precision types
-Price = Decimal
-Amount = Decimal
-Leverage = Decimal
-PnL = Decimal
-Fee = Decimal
-MarginRate = Decimal
-
-# Type alias for backward compatibility during migration
-PriceFloat = Price | float
-AmountFloat = Amount | float
-LeverageFloat = Leverage | float
+# All financial calculations use Decimal directly for precision
+# No custom type aliases - Decimal is clear and sufficient
 
 # Financial calculation constants
 FINANCIAL_PRECISION = Decimal("0.00000001")  # 8 decimal places (crypto standard)
@@ -51,7 +41,7 @@ def to_decimal(value: str | int | float | Decimal) -> Decimal:
     return Decimal(str(value))
 
 
-def round_price(price: Decimal | float) -> Decimal:
+def round_price(price: Decimal) -> Decimal:
     """Round price to appropriate precision for trading.
 
     Args:
@@ -60,10 +50,10 @@ def round_price(price: Decimal | float) -> Decimal:
     Returns:
         Rounded price as Decimal
     """
-    return to_decimal(price).quantize(PRICE_PRECISION, rounding=ROUND_HALF_UP)
+    return price.quantize(PRICE_PRECISION, rounding=ROUND_HALF_UP)
 
 
-def round_amount(amount: Decimal | float) -> Decimal:
+def round_amount(amount: Decimal) -> Decimal:
     """Round amount to appropriate precision for trading.
 
     Args:
@@ -72,10 +62,10 @@ def round_amount(amount: Decimal | float) -> Decimal:
     Returns:
         Rounded amount as Decimal
     """
-    return to_decimal(amount).quantize(FINANCIAL_PRECISION, rounding=ROUND_HALF_UP)
+    return amount.quantize(FINANCIAL_PRECISION, rounding=ROUND_HALF_UP)
 
 
-def round_percentage(percentage: Decimal | float) -> Decimal:
+def round_percentage(percentage: Decimal) -> Decimal:
     """Round percentage to appropriate precision.
 
     Args:
@@ -84,10 +74,10 @@ def round_percentage(percentage: Decimal | float) -> Decimal:
     Returns:
         Rounded percentage as Decimal
     """
-    return to_decimal(percentage).quantize(PERCENTAGE_PRECISION, rounding=ROUND_HALF_UP)
+    return percentage.quantize(PERCENTAGE_PRECISION, rounding=ROUND_HALF_UP)
 
 
-def calculate_notional_value(amount: Decimal | float, price: Decimal | float) -> Decimal:
+def calculate_notional_value(amount: Decimal, price: Decimal) -> Decimal:
     """Calculate notional value with proper precision.
 
     Args:
@@ -97,10 +87,10 @@ def calculate_notional_value(amount: Decimal | float, price: Decimal | float) ->
     Returns:
         Notional value as Decimal
     """
-    return round_amount(to_decimal(amount) * to_decimal(price))
+    return round_amount(amount * price)
 
 
-def calculate_margin_needed(notional_value: Decimal | float, leverage: Decimal | float) -> Decimal:
+def calculate_margin_needed(notional_value: Decimal, leverage: Decimal) -> Decimal:
     """Calculate margin needed with proper precision.
 
     Args:
@@ -110,17 +100,16 @@ def calculate_margin_needed(notional_value: Decimal | float, leverage: Decimal |
     Returns:
         Required margin as Decimal
     """
-    leverage_decimal = to_decimal(leverage)
-    if leverage_decimal <= ZERO:
-        raise ValueError(f"Leverage must be positive, got {leverage_decimal}")
+    if leverage <= ZERO:
+        raise ValueError(f"Leverage must be positive, got {leverage}")
 
-    return round_amount(to_decimal(notional_value) / leverage_decimal)
+    return round_amount(notional_value / leverage)
 
 
 def calculate_pnl(
-    entry_price: Decimal | float,
-    exit_price: Decimal | float,
-    amount: Decimal | float,
+    entry_price: Decimal,
+    exit_price: Decimal,
+    amount: Decimal,
     position_type: str,
 ) -> Decimal:
     """Calculate PnL with proper precision.
@@ -134,16 +123,13 @@ def calculate_pnl(
     Returns:
         PnL as Decimal
     """
-    entry = to_decimal(entry_price)
-    exit = to_decimal(exit_price)
-    amt = to_decimal(abs(float(amount)))
-
+    amt = abs(amount)
     position_type_upper = position_type.upper()
 
     if position_type_upper == "LONG":
-        pnl = (exit - entry) * amt
+        pnl = (exit_price - entry_price) * amt
     elif position_type_upper == "SHORT":
-        pnl = (entry - exit) * amt
+        pnl = (entry_price - exit_price) * amt
     else:
         raise ValueError(f"Invalid position type: {position_type}")
 

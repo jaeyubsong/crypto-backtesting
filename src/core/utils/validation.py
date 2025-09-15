@@ -4,6 +4,7 @@ Validation utilities for core domain models.
 Provides consistent validation across the application.
 """
 
+from decimal import Decimal
 from typing import Any
 
 from src.core.enums import Symbol
@@ -32,7 +33,25 @@ def validate_positive(value: float, param_name: str) -> float:
     """Validate that a numeric value is positive.
 
     Args:
-        value: Value to validate
+        value: Value to validate (float for API boundary validation)
+        param_name: Parameter name for error messages
+
+    Returns:
+        The validated value
+
+    Raises:
+        ValidationError: If value is not positive
+    """
+    if value <= 0:
+        raise ValidationError(f"{param_name} must be positive, got {value}")
+    return value
+
+
+def validate_positive_decimal(value: Decimal, param_name: str) -> Decimal:
+    """Validate that a Decimal value is positive.
+
+    Args:
+        value: Decimal value to validate
         param_name: Parameter name for error messages
 
     Returns:
@@ -50,7 +69,25 @@ def validate_percentage(value: float, param_name: str = "percentage") -> float:
     """Validate that a value is a valid percentage (0-100).
 
     Args:
-        value: Value to validate
+        value: Value to validate (float for API boundary validation)
+        param_name: Parameter name for error messages
+
+    Returns:
+        The validated percentage
+
+    Raises:
+        ValidationError: If value is not between 0 and 100
+    """
+    if value <= 0 or value > 100:
+        raise ValidationError(f"{param_name} must be between 0 and 100, got {value}")
+    return value
+
+
+def validate_percentage_decimal(value: Decimal, param_name: str = "percentage") -> Decimal:
+    """Validate that a Decimal value is a valid percentage (0-100).
+
+    Args:
+        value: Decimal value to validate
         param_name: Parameter name for error messages
 
     Returns:

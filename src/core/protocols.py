@@ -10,7 +10,6 @@ from decimal import Decimal
 from typing import Protocol
 
 from src.core.enums import PositionType, Symbol
-from src.core.types.financial import AmountFloat, LeverageFloat, PriceFloat
 
 
 class IPosition(Protocol):
@@ -21,24 +20,22 @@ class IPosition(Protocol):
     """
 
     symbol: Symbol
-    size: AmountFloat
-    entry_price: PriceFloat
-    leverage: LeverageFloat
+    size: Decimal
+    entry_price: Decimal
+    leverage: Decimal
     timestamp: datetime
     position_type: PositionType
-    margin_used: AmountFloat
+    margin_used: Decimal
 
-    def unrealized_pnl(self, current_price: PriceFloat) -> Decimal:
+    def unrealized_pnl(self, current_price: Decimal) -> Decimal:
         """Calculate unrealized PnL at current price."""
         ...
 
-    def is_liquidation_risk(
-        self, current_price: PriceFloat, maintenance_margin_rate: AmountFloat
-    ) -> bool:
+    def is_liquidation_risk(self, current_price: Decimal, maintenance_margin_rate: Decimal) -> bool:
         """Check if position is at liquidation risk."""
         ...
 
-    def position_value(self, current_price: PriceFloat) -> Decimal:
+    def position_value(self, current_price: Decimal) -> Decimal:
         """Calculate position value at current price."""
         ...
 
@@ -65,5 +62,5 @@ class ITrade(Protocol):
 
 
 # Type aliases for commonly used types
-PriceDict = dict[Symbol, float]
+PriceDict = dict[Symbol, Decimal]
 PositionDict = dict[Symbol, IPosition]

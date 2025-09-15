@@ -7,6 +7,7 @@ following the Single Responsibility Principle for state management.
 
 import threading
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -18,7 +19,7 @@ from src.core.constants import (
 )
 from src.core.enums import Symbol, TradingMode
 from src.core.models.position import Position, Trade
-from src.core.types.financial import to_decimal, AmountFloat, PriceFloat
+from src.core.types.financial import to_decimal
 
 from .portfolio_helpers import PortfolioValidator
 
@@ -37,8 +38,8 @@ class PortfolioCore:
         Read-only operations are safe to call concurrently.
     """
 
-    initial_capital: AmountFloat
-    cash: AmountFloat
+    initial_capital: Decimal
+    cash: Decimal
     positions: dict[Symbol, Position]
     trades: deque[Trade]
     portfolio_history: deque[dict[str, Any]]
@@ -52,17 +53,19 @@ class PortfolioCore:
 
     def available_margin(self) -> Decimal:
         """Calculate available margin for new positions."""
-        return self.cash
+        return to_decimal(self.cash)
 
     def used_margin(self) -> Decimal:
         """Calculate total margin used by open positions."""
-        return sum(position.margin_used for position in self.positions.values())
+        return sum(
+            (to_decimal(position.margin_used) for position in self.positions.values()), Decimal("0")
+        )
 
     def realized_pnl(self) -> Decimal:
         """Calculate total realized PnL from completed trades."""
-        return sum(to_decimal(trade.pnl) for trade in self.trades)
+        return sum((to_decimal(trade.pnl) for trade in self.trades), Decimal("0"))
 
-    def unrealized_pnl(self, current_prices: dict[Symbol, PriceFloat]) -> Decimal:
+    def unrealized_pnl(self, current_prices: Mapping[Symbol, Decimal]) -> Decimal:
         """Calculate total unrealized PnL from all positions."""
         total_pnl = to_decimal(0.0)
         for symbol, position in self.positions.items():
@@ -89,7 +92,7 @@ class PortfolioCore:
             )
 
             self.positions[position.symbol] = position
-            self.cash -= position.margin_used
+            self.cash = to_decimal(self.cash) - to_decimal(position.margin_used)
 
     def remove_position(self, symbol: Symbol) -> Position:
         """Remove and return a position from the portfolio.
@@ -109,7 +112,9 @@ class PortfolioCore:
 
             return self.positions.pop(symbol)
 
-    def record_snapshot(self, timestamp: datetime, current_prices: dict[Symbol, float]) -> None:
+    def record_snapshot(
+        self, timestamp: datetime, current_prices: Mapping[Symbol, Decimal]
+    ) -> None:
         """Record portfolio state at given timestamp.
 
         This method is thread-safe and can be called concurrently.

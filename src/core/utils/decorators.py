@@ -4,15 +4,13 @@ Utility decorators for input validation and common functionality.
 
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from src.core.exceptions.backtest import ValidationError
 from src.core.utils.validation import validate_positive, validate_symbol
 
-F = TypeVar("F", bound=Callable[..., Any])
 
-
-def validate_inputs(func: F) -> F:
+def validate_inputs[F: Callable[..., Any]](func: F) -> F:
     """Decorator to automatically validate common trading inputs.
 
     Validates:
@@ -69,7 +67,7 @@ def validate_inputs(func: F) -> F:
     return wrapper  # type: ignore
 
 
-def log_trades(func: F) -> F:
+def log_trades[F: Callable[..., Any]](func: F) -> F:
     """Decorator to automatically log trading operations with structured context.
 
     Logs entry and exit of trading functions with correlation IDs and
@@ -169,7 +167,7 @@ def log_trades(func: F) -> F:
     return wrapper  # type: ignore
 
 
-def require_position(symbol_param: str = "symbol") -> Callable[[F], F]:
+def require_position[F: Callable[..., Any]](symbol_param: str = "symbol") -> Callable[[F], F]:
     """Decorator to ensure a position exists before executing the function.
 
     Args:

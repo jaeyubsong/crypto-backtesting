@@ -2,6 +2,7 @@
 Unit tests for utility decorators.
 Following TDD approach - testing validation, logging, and position requirement decorators.
 """
+# ruff: noqa: ARG001
 
 from decimal import Decimal
 from unittest.mock import Mock, patch

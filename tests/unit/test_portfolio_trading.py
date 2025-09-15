@@ -23,8 +23,8 @@ class TestPortfolioTradingBuyOperations:
         """Test opening a new long position in SPOT mode."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -51,8 +51,8 @@ class TestPortfolioTradingBuyOperations:
         """Test opening a new long position in FUTURES mode with leverage."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -89,8 +89,8 @@ class TestPortfolioTradingBuyOperations:
         )
 
         core = PortfolioCore(
-            initial_capital=20000.0,
-            cash=8000.0,  # 20000 - 12000
+            initial_capital=Decimal("20000.0"),
+            cash=Decimal("8000.0"),  # 20000 - 12000
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -105,11 +105,11 @@ class TestPortfolioTradingBuyOperations:
         # Assert
         assert result is True
         position = core.positions[Symbol.BTC]
-        assert position.size == 0.8  # 0.5 + 0.3
+        assert position.size == Decimal("0.8")  # 0.5 + 0.3
         # New weighted average: ((0.5 * 48000) + (0.3 * 52000)) / 0.8 = 49500
-        assert position.entry_price == 49500.0
-        assert position.margin_used == 19800.0  # 12000 + 7800
-        assert core.cash == 200.0  # 8000 - 7800
+        assert position.entry_price == Decimal("49500.00")
+        assert position.margin_used == Decimal("19800.00000000")  # 12000 + 7800
+        assert core.cash == Decimal("200.00000000")  # 8000 - 7800
 
     def test_should_close_short_position_with_buy_order(self) -> None:
         """Test closing a short position with a buy order."""
@@ -125,8 +125,8 @@ class TestPortfolioTradingBuyOperations:
         )
 
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=8800.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("8800.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -151,8 +151,8 @@ class TestPortfolioTradingBuyOperations:
         """Test that buy order raises error when insufficient funds."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=1000.0,
-            cash=1000.0,
+            initial_capital=Decimal("1000.0"),
+            cash=Decimal("1000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -175,8 +175,8 @@ class TestPortfolioTradingSellOperations:
         """Test opening a new short position in FUTURES mode."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -203,8 +203,8 @@ class TestPortfolioTradingSellOperations:
         """Test that sell order is rejected in SPOT mode without existing position."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -234,8 +234,8 @@ class TestPortfolioTradingSellOperations:
         )
 
         core = PortfolioCore(
-            initial_capital=30000.0,
-            cash=6000.0,
+            initial_capital=Decimal("30000.0"),
+            cash=Decimal("6000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -270,8 +270,8 @@ class TestPortfolioTradingSellOperations:
         )
 
         core = PortfolioCore(
-            initial_capital=120000.0,
-            cash=20000.0,
+            initial_capital=Decimal("120000.0"),
+            cash=Decimal("20000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -304,8 +304,8 @@ class TestPortfolioTradingSellOperations:
         )
 
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=7000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("7000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -330,8 +330,8 @@ class TestPortfolioTradingSellOperations:
         """Test that sell order raises error when insufficient funds in futures."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=1000.0,
-            cash=1000.0,
+            initial_capital=Decimal("1000.0"),
+            cash=Decimal("1000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -354,8 +354,8 @@ class TestPortfolioTradingEdgeCases:
         """Test handling of zero amount orders (should be validated)."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -371,8 +371,8 @@ class TestPortfolioTradingEdgeCases:
         """Test handling of negative price orders (should be validated)."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -398,8 +398,8 @@ class TestPortfolioTradingEdgeCases:
         )
 
         core = PortfolioCore(
-            initial_capital=30000.0,
-            cash=5000.0,
+            initial_capital=Decimal("30000.0"),
+            cash=Decimal("5000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -420,8 +420,8 @@ class TestPortfolioTradingEdgeCases:
         """Test that trades are recorded with correct fee calculations."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
@@ -448,8 +448,8 @@ class TestPortfolioTradingEdgeCases:
         """Test that operations are thread-safe with proper locking."""
         # Arrange
         core = PortfolioCore(
-            initial_capital=10000.0,
-            cash=10000.0,
+            initial_capital=Decimal("10000.0"),
+            cash=Decimal("10000.0"),
             positions={},
             trades=deque(),
             portfolio_history=deque(),
