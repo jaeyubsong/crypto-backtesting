@@ -5,13 +5,12 @@ This module handles liquidation detection, margin calls, and risk controls
 following the Single Responsibility Principle for risk management.
 """
 
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from src.core.constants import DEFAULT_TAKER_FEE
 from src.core.enums import Symbol
 from src.core.exceptions.backtest import PositionNotFoundError
-from src.core.types.financial import to_decimal
+from src.core.types.financial import to_float
 from src.core.utils.validation import validate_symbol
 
 from .portfolio_helpers import PortfolioValidator
@@ -36,8 +35,8 @@ class PortfolioRisk:
 
     def check_liquidation(
         self,
-        current_prices: dict[Symbol, Decimal],
-        maintenance_margin_rate: Decimal = Decimal("0.05"),
+        current_prices: dict[Symbol, float],
+        maintenance_margin_rate: float = float("0.05"),
     ) -> list[Symbol]:
         """Check and return symbols at risk of liquidation.
 
@@ -60,9 +59,7 @@ class PortfolioRisk:
 
         return at_risk_symbols
 
-    def close_position_at_price(
-        self, symbol: Symbol, close_price: Decimal, fee: Decimal
-    ) -> Decimal:
+    def close_position_at_price(self, symbol: Symbol, close_price: float, fee: float) -> float:
         """Close a position at a specific price and return realized PnL.
 
         This is the original method for closing with known price.
@@ -92,9 +89,7 @@ class PortfolioRisk:
         realized_pnl = unrealized_pnl - fee
 
         # Release margin and add realized PnL
-        self.core.cash = (
-            to_decimal(self.core.cash) + to_decimal(position.margin_used) + realized_pnl
-        )
+        self.core.cash = to_float(self.core.cash) + to_float(position.margin_used) + realized_pnl
 
         # Remove position
         del self.core.positions[symbol]
@@ -102,7 +97,7 @@ class PortfolioRisk:
         return realized_pnl
 
     def close_position(
-        self, symbol: Symbol, current_price: Decimal, percentage: Decimal = Decimal("100.0")
+        self, symbol: Symbol, current_price: float, percentage: float = float("100.0")
     ) -> bool:
         """Close a position (partially or fully).
 
@@ -116,30 +111,33 @@ class PortfolioRisk:
         """
         # Validate inputs using centralized validator
         symbol = validate_symbol(symbol)
-        # Keep current_price as Decimal - no need to convert to float and back
-        # Keep percentage as Decimal - no need to convert to float and back
+
+        # Validate percentage is in valid range (must be > 0 and <= 100)
+        from src.core.utils.validation import validate_percentage
+
+        percentage = validate_percentage(percentage, "percentage")
 
         if symbol not in self.core.positions:
             return False
 
         position = self.core.positions[symbol]
-        position_size = to_decimal(position.size)
-        close_amount = position_size * (percentage / Decimal("100.0"))
+        position_size = to_float(position.size)
+        close_amount = position_size * (percentage / float("100.0"))
 
-        fee = close_amount * current_price * to_decimal(DEFAULT_TAKER_FEE)
+        fee = close_amount * current_price * to_float(DEFAULT_TAKER_FEE)
 
-        if percentage >= Decimal("100"):
+        if percentage >= float("100"):
             # Full close
             self.close_position_at_price(symbol, current_price, fee)
         else:
             # Partial close
-            percentage_decimal = percentage / Decimal("100.0")
+            percentage_decimal = percentage / float("100.0")
             partial_pnl = position.unrealized_pnl(current_price) * percentage_decimal - fee
-            partial_margin = to_decimal(position.margin_used) * percentage_decimal
+            partial_margin = to_float(position.margin_used) * percentage_decimal
 
-            remaining_percentage = Decimal("1") - percentage_decimal
-            position.size = to_decimal(position.size) * remaining_percentage
-            position.margin_used = to_decimal(position.margin_used) * remaining_percentage
-            self.core.cash = to_decimal(self.core.cash) + partial_margin + partial_pnl
+            remaining_percentage = float("1") - percentage_decimal
+            position.size = to_float(position.size) * remaining_percentage
+            position.margin_used = to_float(position.margin_used) * remaining_percentage
+            self.core.cash = to_float(self.core.cash) + partial_margin + partial_pnl
 
         return True

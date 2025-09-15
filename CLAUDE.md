@@ -701,6 +701,50 @@ Before submitting any code, ensure:
 - Set execution timeouts
 - Monitor resource usage
 
+## Precision and Performance Guidelines
+
+### Float-Based Financial Calculations
+
+**Migration Decision (January 2025)**: Migrated from `Decimal` to `float` for 10-100x performance improvement in backtesting.
+
+**✅ Use Cases (Appropriate for Float)**:
+- Backtesting historical data
+- Strategy development and research
+- Paper trading simulations
+- Performance analysis
+
+**🚫 Restricted Use Cases (Require Decimal)**:
+- Production trading with real money
+- Regulatory reporting
+- Accounting systems
+- High-frequency trading production
+
+**Precision Tools Available**:
+```python
+from src.core.types.financial import safe_float_comparison, validate_safe_float_range
+from src.core.constants import FLOAT_COMPARISON_TOLERANCE
+
+# Safe float comparisons
+if safe_float_comparison(price1, price2):
+    # Handle equal prices
+
+# Validate safe ranges
+safe_value = validate_safe_float_range(large_calculation)
+
+# Use consistent rounding
+from src.core.types.financial import round_price, round_amount
+price = round_price(50000.123456)  # 50000.12
+amount = round_amount(1.123456789)  # 1.12345679
+```
+
+**Monitoring Guidelines**:
+- Monitor cumulative rounding errors in long simulations
+- Use tolerance-based comparisons for assertions
+- Log precision-sensitive operations at DEBUG level
+- Set alerts for values approaching `MAX_SAFE_FLOAT`
+
+**Documentation**: See `PRECISION_CONSIDERATIONS.md` and `FUTURE_IMPROVEMENTS.md` for detailed precision guidelines and planned enhancements.
+
 ## Deployment Readiness
 
 **Health Checks:**

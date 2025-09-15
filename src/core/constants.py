@@ -40,3 +40,8 @@ FUTURES_TAKER_FEE = 0.0006  # 0.06% futures taker
 MAX_BACKTEST_DURATION_DAYS = 3650  # 10 years maximum backtest
 MIN_INITIAL_CAPITAL = 100.0  # Minimum starting capital
 MAX_INITIAL_CAPITAL = 100000000.0  # Maximum starting capital (100M)
+
+# Float Precision Constants (added for Decimal → Float migration)
+FLOAT_COMPARISON_TOLERANCE = 1e-9  # Tolerance for float comparisons to handle precision issues
+MAX_SAFE_FLOAT = 9007199254740991  # 2^53 - 1 (max safe integer representation in float64)
+MIN_SAFE_FLOAT = -9007199254740991  # -(2^53 - 1) (min safe integer representation in float64)

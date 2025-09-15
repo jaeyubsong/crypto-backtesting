@@ -6,7 +6,6 @@ between domain models while maintaining type safety.
 """
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Protocol
 
 from src.core.enums import PositionType, Symbol
@@ -20,22 +19,22 @@ class IPosition(Protocol):
     """
 
     symbol: Symbol
-    size: Decimal
-    entry_price: Decimal
-    leverage: Decimal
+    size: float
+    entry_price: float
+    leverage: float
     timestamp: datetime
     position_type: PositionType
-    margin_used: Decimal
+    margin_used: float
 
-    def unrealized_pnl(self, current_price: Decimal) -> Decimal:
+    def unrealized_pnl(self, current_price: float) -> float:
         """Calculate unrealized PnL at current price."""
         ...
 
-    def is_liquidation_risk(self, current_price: Decimal, maintenance_margin_rate: Decimal) -> bool:
+    def is_liquidation_risk(self, current_price: float, maintenance_margin_rate: float) -> bool:
         """Check if position is at liquidation risk."""
         ...
 
-    def position_value(self, current_price: Decimal) -> Decimal:
+    def position_value(self, current_price: float) -> float:
         """Calculate position value at current price."""
         ...
 
@@ -62,5 +61,5 @@ class ITrade(Protocol):
 
 
 # Type aliases for commonly used types
-PriceDict = dict[Symbol, Decimal]
+PriceDict = dict[Symbol, float]
 PositionDict = dict[Symbol, IPosition]

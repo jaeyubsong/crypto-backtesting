@@ -5,7 +5,6 @@ Testing liquidation detection, position closure, and risk management following T
 
 from collections import deque
 from datetime import UTC, datetime
-from decimal import Decimal
 
 import pytest
 
@@ -220,13 +219,13 @@ class TestPortfolioRiskPositionClosure:
         risk_manager = PortfolioRisk(core)
 
         # Act - close at profit
-        close_price = Decimal("55000.0")
-        fee = Decimal("27.5")
+        close_price = float("55000.0")
+        fee = float("27.5")
         realized_pnl = risk_manager.close_position_at_price(Symbol.BTC, close_price, fee)
 
         # Assert
         # PnL = (55000 - 50000) * 1.0 - 27.5 = 5000 - 27.5 = 4972.5
-        assert realized_pnl == Decimal("4972.5")
+        assert realized_pnl == float("4972.5")
         assert Symbol.BTC not in core.positions
         # Cash = original 5000 + margin 5000 + pnl 4972.5 = 14972.5
         assert core.cash == 14972.5
@@ -256,13 +255,13 @@ class TestPortfolioRiskPositionClosure:
         risk_manager = PortfolioRisk(core)
 
         # Act - close short position at loss (price went up)
-        close_price = 3200.0
-        fee = 16.0
+        close_price = float("3200.0")
+        fee = float("16.0")
         realized_pnl = risk_manager.close_position_at_price(Symbol.ETH, close_price, fee)
 
         # Assert
         # Short PnL = (3000 - 3200) * 5.0 - 16.0 = -1000 - 16 = -1016
-        assert realized_pnl == -1016.0
+        assert realized_pnl == float("-1016.0")
         assert Symbol.ETH not in core.positions
         # Cash = original 7000 + margin 3000 + pnl (-1016) = 8984
         assert core.cash == 8984.0
@@ -282,7 +281,7 @@ class TestPortfolioRiskPositionClosure:
 
         # Act & Assert
         with pytest.raises(PositionNotFoundError) as exc_info:
-            risk_manager.close_position_at_price(Symbol.BTC, 55000.0, 27.5)
+            risk_manager.close_position_at_price(Symbol.BTC, float("55000.0"), float("27.5"))
 
         assert "BTCUSDT" in str(exc_info.value)
 
@@ -301,15 +300,15 @@ class TestPortfolioRiskPositionClosure:
 
         # Act & Assert - invalid symbol
         with pytest.raises(ValidationError):
-            risk_manager.close_position_at_price(None, 50000.0, 25.0)  # type: ignore
+            risk_manager.close_position_at_price(None, float("50000.0"), float("25.0"))  # type: ignore
 
         # Invalid price
         with pytest.raises(ValidationError):
-            risk_manager.close_position_at_price(Symbol.BTC, -50000.0, 25.0)
+            risk_manager.close_position_at_price(Symbol.BTC, float("-50000.0"), float("25.0"))
 
         # Invalid fee
         with pytest.raises(ValidationError):
-            risk_manager.close_position_at_price(Symbol.BTC, 50000.0, -25.0)
+            risk_manager.close_position_at_price(Symbol.BTC, float("50000.0"), float("-25.0"))
 
     def test_should_close_position_with_percentage(self) -> None:
         """Test closing position with percentage parameter."""
@@ -336,7 +335,7 @@ class TestPortfolioRiskPositionClosure:
         risk_manager = PortfolioRisk(core)
 
         # Act - close 50% of position
-        result = risk_manager.close_position(Symbol.BTC, 55000.0, percentage=50.0)
+        result = risk_manager.close_position(Symbol.BTC, float("55000.0"), percentage=float("50.0"))
 
         # Assert
         assert result is True
@@ -372,7 +371,7 @@ class TestPortfolioRiskPositionClosure:
         risk_manager = PortfolioRisk(core)
 
         # Act - close 100% of position
-        result = risk_manager.close_position(Symbol.ETH, 3100.0, percentage=100.0)
+        result = risk_manager.close_position(Symbol.ETH, float("3100.0"), percentage=float("100.0"))
 
         # Assert
         assert result is True
@@ -393,7 +392,7 @@ class TestPortfolioRiskPositionClosure:
         risk_manager = PortfolioRisk(core)
 
         # Act
-        result = risk_manager.close_position(Symbol.BTC, 55000.0, percentage=50.0)
+        result = risk_manager.close_position(Symbol.BTC, float("55000.0"), percentage=float("50.0"))
 
         # Assert
         assert result is False
@@ -455,7 +454,7 @@ class TestPortfolioRiskPositionClosure:
 
         # Act - close 25% at profit
         initial_cash = core.cash
-        result = risk_manager.close_position(Symbol.BTC, 52000.0, percentage=25.0)
+        result = risk_manager.close_position(Symbol.BTC, float("52000.0"), percentage=float("25.0"))
 
         # Assert
         assert result is True
@@ -502,11 +501,13 @@ class TestPortfolioRiskEdgeCases:
         risk_manager = PortfolioRisk(core)
 
         # Act
-        realized_pnl = risk_manager.close_position_at_price(Symbol.BTC, 55000.0, 0.05)
+        realized_pnl = risk_manager.close_position_at_price(
+            Symbol.BTC, float("55000.0"), float("0.05")
+        )
 
         # Assert - should handle gracefully
         assert Symbol.BTC not in core.positions
-        assert realized_pnl == Decimal("0.45000000")  # (55000 - 50000) * 0.0001 - 0.05 = 0.5 - 0.05
+        assert realized_pnl == float("0.45000000")  # (55000 - 50000) * 0.0001 - 0.05 = 0.5 - 0.05
 
     def test_should_handle_extreme_leverage_positions(self) -> None:
         """Test handling positions with very high leverage."""

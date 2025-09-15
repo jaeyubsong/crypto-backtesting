@@ -1,7 +1,6 @@
 """Helper methods for Portfolio to reduce complexity."""
 
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from src.core.constants import (
     DEFAULT_TAKER_FEE,
@@ -12,7 +11,7 @@ from src.core.constants import (
 from src.core.enums import ActionType, PositionType, Symbol
 from src.core.exceptions.backtest import InsufficientFundsError, ValidationError
 from src.core.models.position import Position, Trade
-from src.core.types.financial import to_decimal
+from src.core.types.financial import to_float
 from src.core.utils.validation import validate_positive, validate_symbol
 
 
@@ -70,8 +69,8 @@ class PortfolioValidator:
 
     @staticmethod
     def validate_close_position_params(
-        symbol: Symbol, close_price: Decimal, fee: Decimal
-    ) -> tuple[Symbol, Decimal, Decimal]:
+        symbol: Symbol, close_price: float, fee: float
+    ) -> tuple[Symbol, float, float]:
         """Validate parameters for closing a position.
 
         Args:
@@ -98,7 +97,7 @@ class PortfolioValidator:
 
     @staticmethod
     def validate_margin_requirement(
-        margin_needed: Decimal, available_cash: Decimal, operation: str
+        margin_needed: float, available_cash: float, operation: str
     ) -> None:
         """Validate sufficient margin is available.
 
@@ -159,15 +158,15 @@ class OrderValidator:
 
     @staticmethod
     def calculate_margin_needed(
-        amount: Decimal, price: Decimal, leverage: Decimal
-    ) -> tuple[Decimal, Decimal]:
+        amount: float, price: float, leverage: float
+    ) -> tuple[float, float]:
         """Calculate notional value and margin needed."""
         notional_value = amount * price
         margin_needed = notional_value / leverage if leverage > 0 else notional_value
         return notional_value, margin_needed
 
     @staticmethod
-    def check_sufficient_funds(margin_needed: Decimal, available: Decimal, operation: str) -> None:
+    def check_sufficient_funds(margin_needed: float, available: float, operation: str) -> None:
         """Check if sufficient funds available."""
         if margin_needed > available:
             raise InsufficientFundsError(
@@ -182,8 +181,8 @@ class FeeCalculator:
 
     @staticmethod
     def calculate_fee(
-        notional_value: Decimal, fee_rate: Decimal = to_decimal(DEFAULT_TAKER_FEE)
-    ) -> Decimal:
+        notional_value: float, fee_rate: float = to_float(DEFAULT_TAKER_FEE)
+    ) -> float:
         """Calculate trading fee."""
         return notional_value * fee_rate
 
@@ -233,25 +232,25 @@ class PositionManager:
         """Create a new position."""
         return Position(
             symbol=symbol,
-            size=to_decimal(size),
-            entry_price=to_decimal(entry_price),
-            leverage=to_decimal(leverage),
+            size=to_float(size),
+            entry_price=to_float(entry_price),
+            leverage=to_float(leverage),
             timestamp=datetime.now(UTC),
             position_type=position_type,
-            margin_used=to_decimal(margin_used),
+            margin_used=to_float(margin_used),
         )
 
     @staticmethod
     def update_position_size(
         position: Position,
-        additional_size: Decimal,
-        additional_price: Decimal,
-        additional_margin: Decimal,
+        additional_size: float,
+        additional_price: float,
+        additional_margin: float,
     ) -> None:
         """Update position with additional size."""
-        position_size = to_decimal(position.size)
-        position_price = to_decimal(position.entry_price)
-        position_margin = to_decimal(position.margin_used)
+        position_size = to_float(position.size)
+        position_price = to_float(position.entry_price)
+        position_margin = to_float(position.margin_used)
 
         total_size = position_size + additional_size
         total_value = (position_size * position_price) + (additional_size * additional_price)

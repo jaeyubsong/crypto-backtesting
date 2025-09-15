@@ -3,8 +3,8 @@ Unit tests for Portfolio API methods (PRD Section 3.2).
 Tests the getter methods and snapshot recording functionality.
 """
 
+from collections import deque
 from datetime import UTC, datetime
-from decimal import Decimal
 
 import pytest
 
@@ -33,8 +33,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=80000.0,
             positions={Symbol.BTC: btc_position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -56,8 +56,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=95000.0,
             positions={Symbol.ETH: eth_position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -69,8 +69,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -82,8 +82,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -96,8 +96,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=75000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -109,8 +109,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -132,8 +132,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=95000.0,
             positions={Symbol.BTC: position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -146,8 +146,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -169,8 +169,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=75000.0,
             positions={Symbol.BTC: position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -183,8 +183,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -196,8 +196,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -225,8 +225,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=94000.0,
             positions={Symbol.ETH: position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -238,8 +238,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -251,8 +251,8 @@ class TestPortfolioGetterMethods:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -279,8 +279,8 @@ class TestPortfolioSnapshotRecording:
             initial_capital=100000.0,
             cash=75000.0,
             positions={Symbol.BTC: position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.FUTURES,
         )
 
@@ -317,8 +317,8 @@ class TestPortfolioSnapshotRecording:
             initial_capital=100000.0,
             cash=0.0,  # All cash used to buy BTC
             positions={Symbol.BTC: position},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -337,8 +337,8 @@ class TestPortfolioSnapshotRecording:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 
@@ -365,8 +365,8 @@ class TestPortfolioSnapshotRecording:
             initial_capital=100000.0,
             cash=100000.0,
             positions={},
-            trades=[],
-            portfolio_history=[],
+            trades=deque(),
+            portfolio_history=deque(),
             trading_mode=TradingMode.SPOT,
         )
 

@@ -6,14 +6,13 @@ following the Single Responsibility Principle for trading logic.
 """
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from src.core.constants import DEFAULT_TAKER_FEE
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import InsufficientFundsError
 from src.core.models.position import Position, Trade
-from src.core.types.financial import to_decimal
+from src.core.types.financial import to_float
 
 from .portfolio_helpers import (
     FeeCalculator,
@@ -60,7 +59,7 @@ class PortfolioTrading:
             symbol, amount, price, leverage
         )
         notional_value, margin_needed = OrderValidator.calculate_margin_needed(
-            to_decimal(amount), to_decimal(price), to_decimal(leverage)
+            amount, price, leverage
         )
 
         with self.core._lock:  # Thread-safe operation
@@ -107,7 +106,7 @@ class PortfolioTrading:
             symbol, amount, price, leverage
         )
         notional_value, margin_needed = OrderValidator.calculate_margin_needed(
-            to_decimal(amount), to_decimal(price), to_decimal(leverage)
+            amount, price, leverage
         )
 
         with self.core._lock:  # Thread-safe operation
@@ -129,23 +128,23 @@ class PortfolioTrading:
                         )
 
                     # Calculate new average entry price
-                    total_size = existing.size + to_decimal(amount)
+                    total_size = existing.size + to_float(amount)
                     total_value = (existing.size * existing.entry_price) + (
-                        to_decimal(amount) * to_decimal(price)
+                        to_float(amount) * to_float(price)
                     )
                     new_entry_price = total_value / total_size
 
                     # Update position
                     existing.size = total_size
                     existing.entry_price = new_entry_price
-                    existing.margin_used += to_decimal(margin_needed)
-                    self.core.cash -= to_decimal(margin_needed)
+                    existing.margin_used += to_float(margin_needed)
+                    self.core.cash -= to_float(margin_needed)
             else:
                 # Open new short position (futures only)
                 if self.core.trading_mode == TradingMode.SPOT:
                     return False  # Can't open short in spot
 
-                if to_decimal(margin_needed) > self.core.cash:
+                if to_float(margin_needed) > self.core.cash:
                     raise InsufficientFundsError(
                         required=float(margin_needed),
                         available=float(self.core.cash),
@@ -154,12 +153,12 @@ class PortfolioTrading:
 
                 position = Position(
                     symbol=symbol,
-                    size=to_decimal(amount),
-                    entry_price=to_decimal(price),
-                    leverage=to_decimal(leverage),
+                    size=to_float(amount),
+                    entry_price=to_float(price),
+                    leverage=to_float(leverage),
                     timestamp=datetime.now(UTC),
                     position_type=PositionType.SHORT,
-                    margin_used=to_decimal(margin_needed),
+                    margin_used=to_float(margin_needed),
                 )
                 self.core.add_position(position)
 
@@ -171,7 +170,7 @@ class PortfolioTrading:
                     quantity=amount,
                     price=price,
                     leverage=leverage,
-                    fee=float(to_decimal(notional_value) * to_decimal(DEFAULT_TAKER_FEE)),
+                    fee=float(to_float(notional_value) * to_float(DEFAULT_TAKER_FEE)),
                     position_type=PositionType.SHORT,
                     pnl=0,
                     margin_used=float(margin_needed),
@@ -188,14 +187,14 @@ class PortfolioTrading:
         amount: float,
         price: float,
         leverage: float,
-        notional_value: Decimal,
+        notional_value: float,
     ) -> None:
         """Close a short position and record trade."""
         from .portfolio_risk import PortfolioRisk
 
         risk_manager = PortfolioRisk(self.core)
-        fee = FeeCalculator.calculate_fee(to_decimal(notional_value))
-        risk_manager.close_position_at_price(symbol, to_decimal(price), fee)
+        fee = FeeCalculator.calculate_fee(to_float(notional_value))
+        risk_manager.close_position_at_price(symbol, to_float(price), fee)
 
         trade = TradeRecorder.create_trade(
             symbol=symbol,
@@ -205,19 +204,19 @@ class PortfolioTrading:
             leverage=leverage,
             fee=float(fee),
             position_type=PositionType.SHORT,
-            pnl=float(position.unrealized_pnl(to_decimal(price)) - fee),
+            pnl=float(position.unrealized_pnl(to_float(price)) - fee),
             margin_used=0,
         )
         self.core.trades.append(trade)
 
     def _add_to_long_position(
-        self, position: Position, amount: float, price: float, margin_needed: Decimal
+        self, position: Position, amount: float, price: float, margin_needed: float
     ) -> None:
         """Add to existing long position."""
         PositionManager.update_position_size(
-            position, to_decimal(amount), to_decimal(price), to_decimal(margin_needed)
+            position, to_float(amount), to_float(price), to_float(margin_needed)
         )
-        self.core.cash -= to_decimal(margin_needed)
+        self.core.cash -= to_float(margin_needed)
 
     def _open_long_position(
         self,
@@ -225,8 +224,8 @@ class PortfolioTrading:
         amount: float,
         price: float,
         leverage: float,
-        notional_value: Decimal,
-        margin_needed: Decimal,
+        notional_value: float,
+        margin_needed: float,
     ) -> None:
         """Open new long position and record trade."""
         position = PositionManager.create_position(
@@ -239,7 +238,7 @@ class PortfolioTrading:
         )
         self.core.add_position(position)
 
-        fee = FeeCalculator.calculate_fee(to_decimal(notional_value))
+        fee = FeeCalculator.calculate_fee(to_float(notional_value))
         trade = TradeRecorder.create_trade(
             symbol=symbol,
             action=ActionType.BUY,
@@ -259,7 +258,7 @@ class PortfolioTrading:
         position: Position,
         amount: float,
         price: float,
-        notional_value: Decimal,
+        notional_value: float,
     ) -> None:
         """Close a long position (partial or full)."""
         from .portfolio_risk import PortfolioRisk
@@ -270,20 +269,18 @@ class PortfolioTrading:
             return
 
         close_price = price
-        fee = to_decimal(notional_value) * to_decimal(DEFAULT_TAKER_FEE)
+        fee = to_float(notional_value) * to_float(DEFAULT_TAKER_FEE)
         risk_manager = PortfolioRisk(self.core)
 
-        if to_decimal(amount) >= position.size:
+        if to_float(amount) >= position.size:
             # Close entire position
-            risk_manager.close_position_at_price(symbol, to_decimal(close_price), fee)
+            risk_manager.close_position_at_price(symbol, to_float(close_price), fee)
         else:
             # Partial close
-            partial_pnl = (to_decimal(close_price) - position.entry_price) * to_decimal(
-                amount
-            ) - fee
-            partial_margin = position.margin_used * (to_decimal(amount) / position.size)
+            partial_pnl = (to_float(close_price) - position.entry_price) * to_float(amount) - fee
+            partial_margin = position.margin_used * (to_float(amount) / position.size)
 
-            position.size -= to_decimal(amount)
+            position.size -= to_float(amount)
             position.margin_used -= partial_margin
             self.core.cash += partial_margin + partial_pnl
 
@@ -298,8 +295,7 @@ class PortfolioTrading:
             fee=float(fee),
             position_type=PositionType.LONG,
             pnl=float(
-                position.unrealized_pnl(to_decimal(price)) * (to_decimal(amount) / position.size)
-                - fee
+                position.unrealized_pnl(to_float(price)) * (to_float(amount) / position.size) - fee
             ),
             margin_used=0,
         )

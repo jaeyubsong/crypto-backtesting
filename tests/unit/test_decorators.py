@@ -4,7 +4,6 @@ Following TDD approach - testing validation, logging, and position requirement d
 """
 # ruff: noqa: ARG001
 
-from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import pytest
@@ -171,25 +170,26 @@ class TestLogTradesDecorator:
 
     @patch("loguru.logger")
     def test_should_handle_decimal_parameters(self, mock_logger: Mock) -> None:
-        """Test that decorator properly handles Decimal parameters."""
+        """Test that decorator properly handles float parameters with high precision."""
 
         @log_trades
-        def test_function(symbol: Symbol, amount: Decimal, price: Decimal) -> bool:
+        def test_function(symbol: Symbol, amount: float, price: float) -> bool:
             return True
 
-        # Execute with Decimal parameters
-        amount = Decimal("1.50000000")
-        price = Decimal("50000.12")
+        # Execute with float parameters
+        amount = 1.50000000
+        price = 50000.12
         result = test_function(Symbol.BTC, amount, price)
 
         # Verify result
         assert result is True
 
-        # Check that Decimal values are properly serialized
+        # Check that float values are properly logged
         entry_call = mock_logger.info.call_args
         entry_context = entry_call[1]["extra"]
-        assert entry_context["amount"] == "1.50000000"
-        assert entry_context["price"] == "50000.12"
+        # Since we're using float now, values are logged as floats, not strings
+        assert entry_context["amount"] == 1.5
+        assert entry_context["price"] == 50000.12
 
     @patch("loguru.logger")
     def test_should_generate_unique_correlation_ids(self, mock_logger: Mock) -> None:

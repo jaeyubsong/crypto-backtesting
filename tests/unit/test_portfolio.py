@@ -4,7 +4,6 @@ Following TDD approach - write failing tests first.
 """
 
 from datetime import UTC, datetime
-from decimal import Decimal
 
 import pytest
 
@@ -23,15 +22,15 @@ class TestPortfolioBasics:
     def test_should_create_portfolio_with_initial_capital(self) -> None:
         """Test portfolio creation with initial capital."""
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("10000.0"),
             positions={},
             trades=None,
             portfolio_history=None,
             trading_mode=TradingMode.SPOT,
         )
 
-        assert portfolio.initial_capital == Decimal("10000.0")
+        assert portfolio.initial_capital == float("10000.0")
         assert float(portfolio.cash) == 10000.0
         assert len(portfolio.positions) == 0
         assert len(portfolio.trades) == 0
@@ -41,8 +40,8 @@ class TestPortfolioBasics:
     def test_should_calculate_available_margin(self) -> None:
         """Test available margin calculation."""
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("5000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("5000.0"),
             positions={},
             trades=None,
             portfolio_history=None,
@@ -57,11 +56,11 @@ class TestPortfolioBasics:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=2.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("25000.0"),
+            margin_used=float("25000.0"),
         )
 
         eth_position = Position(
@@ -71,11 +70,11 @@ class TestPortfolioBasics:
             leverage=3.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("10000.0"),
+            margin_used=float("10000.0"),
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("50000.0"),
+            initial_capital=float("50000.0"),
             cash=15000.0,
             positions={Symbol.BTC: btc_position, Symbol.ETH: eth_position},
             trades=None,
@@ -91,8 +90,8 @@ class TestPortfolioBasics:
         # Simplified test - would need actual trades in deque for real calculation
 
         portfolio = Portfolio(
-            initial_capital=Decimal("50000.0"),
-            cash=Decimal("52459.5"),
+            initial_capital=float("50000.0"),
+            cash=float("52459.5"),
             positions={},
             trades=None,
             portfolio_history=None,
@@ -105,8 +104,8 @@ class TestPortfolioBasics:
     def test_should_add_position_to_portfolio(self) -> None:
         """Test adding a new position to portfolio."""
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("10000.0"),
             positions={},
             trades=None,
             portfolio_history=None,
@@ -116,11 +115,11 @@ class TestPortfolioBasics:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=0.5,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=5.0,  # Higher leverage to reduce margin requirement
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("5000.0"),  # 0.5 * 50000 / 5
+            margin_used=float("5000.0"),  # 0.5 * 50000 / 5
         )
 
         portfolio.add_position(btc_position)
@@ -143,11 +142,11 @@ class TestPortfolioBasics:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=2.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("25000.0"),
+            margin_used=float("25000.0"),
         )
 
         with pytest.raises(InsufficientFundsError) as exc_info:
@@ -159,8 +158,8 @@ class TestPortfolioBasics:
     def test_should_raise_error_when_closing_nonexistent_position(self) -> None:
         """Test error when closing position that doesn't exist."""
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("10000.0"),
             positions={},
             trades=None,
             portfolio_history=None,
@@ -179,8 +178,8 @@ class TestPortfolioSpotMode:
     def test_should_calculate_portfolio_value_with_no_positions(self) -> None:
         """Test SPOT portfolio value with no positions (just cash)."""
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("10000.0"),
             positions={},
             trades=None,
             portfolio_history=None,
@@ -197,15 +196,15 @@ class TestPortfolioSpotMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("48000.0"),
+            entry_price=float("48000.0"),
             leverage=1.0,  # No leverage in spot
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("48000.0"),  # Full amount in spot
+            margin_used=float("48000.0"),  # Full amount in spot
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("50000.0"),
+            initial_capital=float("50000.0"),
             cash=2000.0,  # 50000 - 48000
             positions={Symbol.BTC: btc_position},
             trades=None,
@@ -225,11 +224,11 @@ class TestPortfolioSpotMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=0.5,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=1.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("25000.0"),
+            margin_used=float("25000.0"),
         )
 
         eth_position = Position(
@@ -239,12 +238,12 @@ class TestPortfolioSpotMode:
             leverage=1.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("30000.0"),
+            margin_used=float("30000.0"),
         )
 
         portfolio = Portfolio(
             initial_capital=60000.0,
-            cash=Decimal("5000.0"),  # 60000 - 25000 - 30000
+            cash=float("5000.0"),  # 60000 - 25000 - 30000
             positions={Symbol.BTC: btc_position, Symbol.ETH: eth_position},
             trades=None,
             portfolio_history=None,
@@ -266,8 +265,8 @@ class TestPortfolioFuturesMode:
     def test_should_calculate_portfolio_value_with_no_positions(self) -> None:
         """Test FUTURES portfolio value with no positions (just equity)."""
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("10000.0"),
             positions={},
             trades=None,
             portfolio_history=None,
@@ -285,15 +284,15 @@ class TestPortfolioFuturesMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("48000.0"),
+            entry_price=float("48000.0"),
             leverage=10.0,  # High leverage common in futures
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("4800.0"),  # 48000 / 10
+            margin_used=float("4800.0"),  # 48000 / 10
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
             cash=5200.0,  # 10000 - 4800 margin
             positions={Symbol.BTC: btc_position},
             trades=None,
@@ -318,11 +317,11 @@ class TestPortfolioFuturesMode:
             leverage=5.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.SHORT,
-            margin_used=Decimal("6000.0"),  # (10 * 3000) / 5
+            margin_used=float("6000.0"),  # (10 * 3000) / 5
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
+            initial_capital=float("10000.0"),
             cash=4000.0,  # 10000 - 6000 margin
             positions={Symbol.ETH: eth_position},
             trades=None,
@@ -343,11 +342,11 @@ class TestPortfolioFuturesMode:
         btc_long = Position(
             symbol=Symbol.BTC,
             size=0.5,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=20.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("1250.0"),  # (0.5 * 50000) / 20
+            margin_used=float("1250.0"),  # (0.5 * 50000) / 20
         )
 
         eth_short = Position(
@@ -357,12 +356,12 @@ class TestPortfolioFuturesMode:
             leverage=10.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.SHORT,
-            margin_used=Decimal("1500.0"),  # (5 * 3000) / 10
+            margin_used=float("1500.0"),  # (5 * 3000) / 10
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("7250.0"),  # 10000 - 1250 - 1500
+            initial_capital=float("10000.0"),
+            cash=float("7250.0"),  # 10000 - 1250 - 1500
             positions={Symbol.BTC: btc_long, Symbol.ETH: eth_short},
             trades=None,
             portfolio_history=None,
@@ -383,11 +382,11 @@ class TestPortfolioFuturesMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,  # Long 1 BTC
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=10.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("5000.0"),
+            margin_used=float("5000.0"),
         )
 
         eth_position = Position(
@@ -397,12 +396,12 @@ class TestPortfolioFuturesMode:
             leverage=5.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.SHORT,
-            margin_used=Decimal("3000.0"),
+            margin_used=float("3000.0"),
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("50000.0"),
-            cash=Decimal("42000.0"),
+            initial_capital=float("50000.0"),
+            cash=float("42000.0"),
             positions={Symbol.BTC: btc_position, Symbol.ETH: eth_position},
             trades=None,
             portfolio_history=None,
@@ -422,16 +421,16 @@ class TestPortfolioFuturesMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=10.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("5000.0"),
+            margin_used=float("5000.0"),
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("5000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("5000.0"),
             positions={Symbol.BTC: btc_position},
             trades=None,
             portfolio_history=None,
@@ -452,16 +451,16 @@ class TestPortfolioFuturesMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=20.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("2500.0"),
+            margin_used=float("2500.0"),
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("5000.0"),
-            cash=Decimal("2500.0"),
+            initial_capital=float("5000.0"),
+            cash=float("2500.0"),
             positions={Symbol.BTC: btc_position},
             trades=None,
             portfolio_history=None,
@@ -481,16 +480,16 @@ class TestPortfolioFuturesMode:
         btc_position = Position(
             symbol=Symbol.BTC,
             size=1.0,
-            entry_price=Decimal("50000.0"),
+            entry_price=float("50000.0"),
             leverage=10.0,
             timestamp=datetime.now(UTC),
             position_type=PositionType.LONG,
-            margin_used=Decimal("5000.0"),
+            margin_used=float("5000.0"),
         )
 
         portfolio = Portfolio(
-            initial_capital=Decimal("10000.0"),
-            cash=Decimal("5000.0"),
+            initial_capital=float("10000.0"),
+            cash=float("5000.0"),
             positions={Symbol.BTC: btc_position},
             trades=None,
             portfolio_history=None,

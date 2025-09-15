@@ -1,11 +1,10 @@
 """
 Unit tests for Position domain model.
 Following TDD approach - write failing tests first.
-Enhanced to test Decimal precision for financial calculations.
+Enhanced to test float precision for financial calculations.
 """
 
 from datetime import UTC, datetime
-from decimal import Decimal
 
 import pytest
 
@@ -72,11 +71,11 @@ class TestPosition:
 
         # Price increases - profit for long
         unrealized_pnl = position.unrealized_pnl(52000.0)
-        assert unrealized_pnl == Decimal("2000.00000000")  # (52000 - 50000) * 1.0
+        assert unrealized_pnl == float("2000.00000000")  # (52000 - 50000) * 1.0
 
         # Price decreases - loss for long
         unrealized_pnl = position.unrealized_pnl(48000.0)
-        assert unrealized_pnl == Decimal("-2000.00000000")  # (48000 - 50000) * 1.0
+        assert unrealized_pnl == float("-2000.00000000")  # (48000 - 50000) * 1.0
 
     def test_should_calculate_unrealized_pnl_for_short_position(self) -> None:
         """Test unrealized PnL calculation for short position."""
@@ -92,11 +91,11 @@ class TestPosition:
 
         # Price decreases - profit for short
         unrealized_pnl = position.unrealized_pnl(2800.0)
-        assert unrealized_pnl == Decimal("200.00000000")  # (3000 - 2800) * abs(-1.0)
+        assert unrealized_pnl == float("200.00000000")  # (3000 - 2800) * abs(-1.0)
 
         # Price increases - loss for short
         unrealized_pnl = position.unrealized_pnl(3200.0)
-        assert unrealized_pnl == Decimal("-200.00000000")  # (3000 - 3200) * abs(-1.0)
+        assert unrealized_pnl == float("-200.00000000")  # (3000 - 3200) * abs(-1.0)
 
     def test_should_detect_liquidation_risk_for_long_position(self) -> None:
         """Test liquidation risk detection for long position."""
