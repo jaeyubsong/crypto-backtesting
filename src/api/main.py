@@ -26,12 +26,12 @@ app.include_router(data.router, prefix="/api/data", tags=["data"])
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint returning API information."""
     return {"message": "Crypto Backtesting API", "version": "1.0.0", "status": "running"}
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "healthy"}

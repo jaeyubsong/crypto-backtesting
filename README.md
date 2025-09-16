@@ -2,6 +2,30 @@
 
 A comprehensive cryptocurrency backtesting platform that enables quantitative traders to develop, test, and analyze algorithmic trading strategies using historical market data.
 
+## 📊 Project Status
+
+**Current Phase:** Active Development - Phase 3 (Data Layer Implementation)
+
+### ✅ Completed Features
+- **Core Domain Models**: Position, Trade, and Portfolio models with full functionality
+- **Type Safety**: Strict typing with Symbol, TradingMode, PositionType, and ActionType enums
+- **Portfolio Management**: Complete buy/sell/close operations with leverage support (1x-100x)
+- **Risk Management**: Margin calculations, liquidation detection, and position limits
+- **Trading Modes**: Separate logic for SPOT and FUTURES trading
+- **Exception Handling**: Comprehensive domain-specific exception hierarchy
+- **Data Pipeline**: Automated Binance data download and OHLCV conversion
+- **Testing Infrastructure**: 130+ unit tests with 90-100% coverage on core modules
+
+### 🚧 In Progress
+- Data layer implementation for efficient historical data loading
+- Strategy framework with security sandbox
+
+### 📋 Upcoming
+- Backtesting engine core
+- FastAPI backend implementation
+- Web-based frontend interface
+- Performance metrics calculator
+
 ## 🚀 Features
 
 - **High-Performance Backtesting Engine**: Test strategies on historical crypto data with realistic trading conditions
@@ -167,6 +191,9 @@ uv run ruff check --fix
 # Format code
 uv run ruff format
 
+# Type checking with mypy
+uv run mypy src tests
+
 # Run all pre-commit hooks
 uv run pre-commit run --all-files
 ```
@@ -207,10 +234,24 @@ Once the server is running, visit:
 
 ```
 src/
-├── api/                # FastAPI application and routers
-├── backtesting/        # Core backtesting engine
-├── data/              # Data loading and processing
-└── utils/             # Utilities and helpers
+├── core/               # Domain logic (no external dependencies)
+│   ├── models/        # Domain models (Position, Trade, Portfolio)
+│   ├── interfaces/    # Abstract interfaces (IStrategy, IPortfolio, etc.)
+│   ├── enums/        # Type-safe enumerations
+│   ├── exceptions/   # Domain-specific exceptions
+│   ├── constants.py  # System constants and limits
+│   ├── types.py      # Protocol types to avoid circular imports
+│   └── utils/        # Validation utilities
+├── infrastructure/    # External dependencies
+│   ├── data/         # Data access layer
+│   └── storage/      # File/DB storage
+├── application/      # Use cases and services
+│   ├── services/     # Business logic services
+│   └── dto/         # Data transfer objects
+├── api/             # FastAPI application and routers
+│   ├── routers/     # API endpoints
+│   └── schemas/     # Pydantic schemas
+└── backtesting/     # Legacy compatibility layer
 
 data/                  # Market data (gitignored)
 results/               # Backtest results (gitignored)
@@ -221,11 +262,19 @@ static/                # Frontend assets
 
 ### Key Components
 
-- **BacktestEngine**: Core backtesting logic
-- **Portfolio**: Position and risk management
-- **Strategy**: Base class for trading strategies
-- **MetricsCalculator**: Performance analysis
-- **DataLoader**: Historical data management
+#### Implemented ✅
+- **Portfolio**: Complete position and risk management with margin/leverage support
+- **Position**: Trade position tracking with PnL calculations
+- **Trade**: Individual trade records with fees and realized PnL
+- **Enums**: Type-safe Symbol, TradingMode, PositionType, ActionType
+- **Exceptions**: Domain-specific error handling (ValidationError, InsufficientFundsError, etc.)
+- **Validation**: Input validation utilities for consistency
+
+#### In Development 🚧
+- **DataLoader**: Historical data management (Phase 3)
+- **Strategy**: Base class for trading strategies (Phase 5)
+- **BacktestEngine**: Core backtesting logic (Phase 6)
+- **MetricsCalculator**: Performance analysis (Phase 7)
 
 ## 📈 Performance Metrics
 
@@ -253,12 +302,16 @@ The platform calculates comprehensive performance metrics:
 
 ### Code Standards
 
-- Follow SOLID principles
-- Maximum file size: 300 lines
-- Maximum function size: 30 lines
-- Type hints required on all functions
-- Docstrings required on all public APIs
-- Minimum test coverage: 80%
+- **SOLID Principles**: Strictly enforced across all modules
+- **Type Safety**: Full type hints with mypy strict mode
+- **File Guidelines**: Target 150-200 lines per class, maximum 300 lines (business justification required for exceptions)
+- **Function Limits**: Maximum 30 lines per function
+- **Documentation**: Docstrings required on all public APIs
+- **Test Coverage**: Minimum 80% overall, 90%+ for core logic
+- **TDD Mandatory**: Tests written FIRST for all business logic
+- **Import Rules**: Core layer has NO external dependencies
+- **Validation**: All inputs validated at boundaries
+- **Design Focus**: Single Responsibility Principle drives class splitting decisions
 
 ## 📝 License
 
@@ -267,6 +320,13 @@ The platform calculates comprehensive performance metrics:
 ## 🙋‍♂️ Support
 
 For questions or issues, please open a GitHub issue or contact the development team.
+
+## 📚 Documentation
+
+- **[Product Requirements Document (PRD)](PRD.md)**: Business requirements and feature specifications
+- **[Technical Specification](TECHNICAL_SPEC.md)**: Detailed technical architecture and design
+- **[Implementation Plan](IMPLEMENTATION_PLAN.md)**: Development phases and progress tracking
+- **[Claude AI Instructions](CLAUDE.md)**: Development standards and AI assistance guidelines
 
 ---
 

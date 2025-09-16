@@ -56,3 +56,4 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+.tmp-docs/

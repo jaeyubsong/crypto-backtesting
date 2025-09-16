@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.post("/")
-async def submit_backtest():
+async def submit_backtest() -> dict[str, str]:
     """Submit a new backtest for execution."""
     return {
         "message": "Backtest endpoint - to be implemented in Phase 6",
@@ -17,7 +17,7 @@ async def submit_backtest():
 
 
 @router.get("/{backtest_id}")
-async def get_backtest_results(backtest_id: str):
+async def get_backtest_results(backtest_id: str) -> dict[str, str]:
     """Get backtest results by ID."""
     return {
         "message": f"Get backtest results for {backtest_id} - to be implemented in Phase 6",

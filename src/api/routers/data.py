@@ -8,16 +8,16 @@ router = APIRouter()
 
 
 @router.get("/symbols")
-async def get_available_symbols():
+async def get_available_symbols() -> dict[str, list[str]]:
     """Get list of available trading symbols."""
     return {
-        "message": "Get available symbols - to be implemented in Phase 3",
-        "status": "not_implemented",
+        "symbols": ["BTCUSDT", "ETHUSDT"],
+        "trading_modes": ["spot", "futures"],
     }
 
 
 @router.get("/history")
-async def get_historical_data():
+async def get_historical_data() -> dict[str, str]:
     """Get historical OHLCV data for charting."""
     return {
         "message": "Get historical data - to be implemented in Phase 3",
