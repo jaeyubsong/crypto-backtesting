@@ -17,17 +17,19 @@ class TestDataLayerIntegration:
     """Integration tests for data layer components."""
 
     @pytest.fixture
-    def loader(self):
+    def loader(self) -> CSVDataLoader:
         """Create loader using real data directory."""
         return CSVDataLoader(data_directory="data", cache_size=50)
 
     @pytest.fixture
-    def processor(self):
+    def processor(self) -> OHLCVDataProcessor:
         """Create data processor."""
         return OHLCVDataProcessor()
 
     @pytest.mark.asyncio
-    async def test_should_load_and_process_real_data(self, loader, processor):
+    async def test_should_load_and_process_real_data(
+        self, loader: CSVDataLoader, processor: OHLCVDataProcessor
+    ) -> None:
         """Test loading and processing real data from files."""
         # Check if we have real data available
         data_path = Path("data/binance/futures/BTCUSDT/1h")
@@ -72,7 +74,7 @@ class TestDataLayerIntegration:
         except Exception as e:
             pytest.skip(f"Integration test failed due to data issues: {str(e)}")
 
-    def test_should_discover_available_data(self, loader):
+    def test_should_discover_available_data(self, loader: CSVDataLoader) -> None:
         """Test discovery of available symbols and timeframes."""
         symbols = loader.get_available_symbols("futures")
 
@@ -91,7 +93,9 @@ class TestDataLayerIntegration:
             assert len(timeframes) > 0
 
     @pytest.mark.asyncio
-    async def test_should_handle_missing_data_gracefully(self, loader, processor):
+    async def test_should_handle_missing_data_gracefully(
+        self, loader: CSVDataLoader, processor: OHLCVDataProcessor
+    ) -> None:
         """Test handling of missing data files gracefully."""
         # Try to load data from future dates that don't exist
         start_date = datetime(2030, 1, 1)
@@ -108,7 +112,7 @@ class TestDataLayerIntegration:
             pass
 
     @pytest.mark.asyncio
-    async def test_should_cache_data_effectively(self, loader):
+    async def test_should_cache_data_effectively(self, loader: CSVDataLoader) -> None:
         """Test that caching works effectively."""
         data_path = Path("data/binance/futures/BTCUSDT/1h")
         if not data_path.exists():
@@ -143,7 +147,7 @@ class TestDataLayerIntegration:
             pytest.skip(f"Caching test failed due to data issues: {str(e)}")
 
     @pytest.mark.asyncio
-    async def test_should_handle_different_timeframes(self, loader):
+    async def test_should_handle_different_timeframes(self, loader: CSVDataLoader) -> None:
         """Test loading data for different timeframes."""
         data_path = Path("data/binance/futures/BTCUSDT")
         if not data_path.exists():

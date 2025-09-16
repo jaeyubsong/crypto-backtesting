@@ -8,7 +8,8 @@ for the CSVDataLoader class.
 import asyncio
 import shutil
 import tempfile
-from datetime import datetime, timedelta
+from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -22,7 +23,7 @@ class TestCSVDataLoader:
     """Test suite for CSVDataLoader."""
 
     @pytest.fixture
-    def temp_data_dir(self):
+    def temp_data_dir(self) -> Generator[Path]:
         """Create temporary data directory with sample files."""
         temp_dir = Path(tempfile.mkdtemp())
 
@@ -45,7 +46,10 @@ class TestCSVDataLoader:
                 closes = []
                 volumes = []
 
-                base_timestamp = int(date.timestamp() * 1000)
+                # Convert date to UTC timestamp
+                import calendar
+
+                base_timestamp = int(calendar.timegm(date.timetuple()) * 1000)
                 base_price = 50000 + i * 1000  # Different price for each day
 
                 for hour in range(24):
@@ -82,22 +86,22 @@ class TestCSVDataLoader:
             shutil.rmtree(temp_dir)
 
     @pytest.fixture
-    def loader(self, temp_data_dir):
+    def loader(self, temp_data_dir: Path) -> CSVDataLoader:
         """Create CSVDataLoader instance with test data directory."""
         return CSVDataLoader(data_directory=str(temp_data_dir), cache_size=10)
 
-    def test_should_initialize_with_valid_directory(self, temp_data_dir):
+    def test_should_initialize_with_valid_directory(self, temp_data_dir: Path) -> None:
         """Test loader initializes with valid data directory."""
         loader = CSVDataLoader(data_directory=str(temp_data_dir))
         assert loader.data_dir == temp_data_dir
         assert loader.cache.maxsize == 100  # default cache size
 
-    def test_should_raise_error_for_invalid_directory(self):
+    def test_should_raise_error_for_invalid_directory(self) -> None:
         """Test loader raises error for non-existent directory."""
         with pytest.raises(DataError, match="Data directory not found"):
             CSVDataLoader(data_directory="/nonexistent/path")
 
-    def test_should_raise_error_for_missing_binance_directory(self, temp_data_dir):
+    def test_should_raise_error_for_missing_binance_directory(self, temp_data_dir: Path) -> None:
         """Test loader raises error when binance directory is missing."""
         # Remove binance directory
         binance_dir = temp_data_dir / "binance"
@@ -107,10 +111,10 @@ class TestCSVDataLoader:
             CSVDataLoader(data_directory=str(temp_data_dir))
 
     @pytest.mark.asyncio
-    async def test_should_load_data_for_single_day(self, loader):
+    async def test_should_load_data_for_single_day(self, loader: CSVDataLoader) -> None:
         """Test loading data for a single day."""
-        start_date = datetime(2025, 1, 1)
-        end_date = datetime(2025, 1, 1, 23, 59, 59)
+        start_date = datetime(2025, 1, 1, tzinfo=UTC)
+        end_date = datetime(2025, 1, 1, 23, 59, 59, tzinfo=UTC)
 
         data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
@@ -121,10 +125,10 @@ class TestCSVDataLoader:
         assert data["volume"].iloc[0] == 100  # First volume
 
     @pytest.mark.asyncio
-    async def test_should_load_data_for_multiple_days(self, loader):
+    async def test_should_load_data_for_multiple_days(self, loader: CSVDataLoader) -> None:
         """Test loading data across multiple days."""
-        start_date = datetime(2025, 1, 1)
-        end_date = datetime(2025, 1, 3, 23, 59, 59)
+        start_date = datetime(2025, 1, 1, tzinfo=UTC)
+        end_date = datetime(2025, 1, 3, 23, 59, 59, tzinfo=UTC)
 
         data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
@@ -137,25 +141,29 @@ class TestCSVDataLoader:
         assert data["open"].iloc[48] == 52000  # Day 3 first price
 
     @pytest.mark.asyncio
-    async def test_should_filter_by_exact_date_range(self, loader):
+    async def test_should_filter_by_exact_date_range(self, loader: CSVDataLoader) -> None:
         """Test data is filtered to exact date range."""
         # Request only first 12 hours of first day
-        start_date = datetime(2025, 1, 1, 0, 0, 0)
-        end_date = datetime(2025, 1, 1, 11, 59, 59)
+        start_date = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_date = datetime(2025, 1, 1, 11, 59, 59, tzinfo=UTC)
 
         data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
         assert len(data) == 12  # Only first 12 hours
 
         # Verify timestamp range
-        first_ts = pd.to_datetime(data["timestamp"].iloc[0], unit="ms", utc=True)
-        last_ts = pd.to_datetime(data["timestamp"].iloc[-1], unit="ms", utc=True)
+        first_ts = pd.to_datetime(data["timestamp"].iloc[0], unit="ms")
+        last_ts = pd.to_datetime(data["timestamp"].iloc[-1], unit="ms")
 
-        assert first_ts >= start_date.replace(tzinfo=pd.Timestamp.now().tz)
-        assert last_ts <= end_date.replace(tzinfo=pd.Timestamp.now().tz)
+        # Convert timestamps to UTC aware for comparison
+        first_ts_utc = first_ts.tz_localize("UTC") if first_ts.tz is None else first_ts
+        last_ts_utc = last_ts.tz_localize("UTC") if last_ts.tz is None else last_ts
+
+        assert first_ts_utc >= start_date
+        assert last_ts_utc <= end_date
 
     @pytest.mark.asyncio
-    async def test_should_handle_missing_files_gracefully(self, loader):
+    async def test_should_handle_missing_files_gracefully(self, loader: CSVDataLoader) -> None:
         """Test loader handles missing files without crashing."""
         # Request data that includes missing days
         start_date = datetime(2025, 1, 1)
@@ -168,7 +176,7 @@ class TestCSVDataLoader:
         assert not data.empty
 
     @pytest.mark.asyncio
-    async def test_should_cache_loaded_files(self, loader):
+    async def test_should_cache_loaded_files(self, loader: CSVDataLoader) -> None:
         """Test that loaded files are cached for performance."""
         start_date = datetime(2025, 1, 1)
         end_date = datetime(2025, 1, 1, 23, 59, 59)
@@ -185,7 +193,7 @@ class TestCSVDataLoader:
         assert cache_info["cache_size"] > 0
 
     @pytest.mark.asyncio
-    async def test_should_validate_input_parameters(self, loader):
+    async def test_should_validate_input_parameters(self, loader: CSVDataLoader) -> None:
         """Test input parameter validation."""
         start_date = datetime(2025, 1, 1)
         end_date = datetime(2025, 1, 2)
@@ -199,7 +207,7 @@ class TestCSVDataLoader:
             await loader.load_data("BTCUSDT", "", start_date, end_date)
 
         # Invalid date range
-        with pytest.raises(ValidationError, match="start_date must be before end_date"):
+        with pytest.raises(ValidationError, match="start_date must be before or equal to end_date"):
             await loader.load_data("BTCUSDT", "1h", end_date, start_date)
 
         # Invalid timeframe
@@ -211,7 +219,9 @@ class TestCSVDataLoader:
             await loader.load_data("BTCUSDT", "1h", start_date, end_date, "invalid")
 
     @pytest.mark.asyncio
-    async def test_should_validate_csv_structure(self, loader, temp_data_dir):
+    async def test_should_validate_csv_structure(
+        self, loader: CSVDataLoader, temp_data_dir: Path
+    ) -> None:
         """Test CSV structure validation."""
         # Create invalid CSV file
         invalid_file = (
@@ -235,7 +245,9 @@ class TestCSVDataLoader:
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     @pytest.mark.asyncio
-    async def test_should_validate_ohlc_relationships(self, loader, temp_data_dir):
+    async def test_should_validate_ohlc_relationships(
+        self, loader: CSVDataLoader, temp_data_dir: Path
+    ) -> None:
         """Test OHLC relationship validation."""
         # Create CSV with invalid OHLC relationships
         invalid_file = (
@@ -261,7 +273,9 @@ class TestCSVDataLoader:
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     @pytest.mark.asyncio
-    async def test_should_handle_empty_csv_files(self, loader, temp_data_dir):
+    async def test_should_handle_empty_csv_files(
+        self, loader: CSVDataLoader, temp_data_dir: Path
+    ) -> None:
         """Test handling of empty CSV files."""
         # Create empty CSV file
         empty_file = (
@@ -278,17 +292,17 @@ class TestCSVDataLoader:
         # Should have data from available days (1-3)
         assert len(data) == 72
 
-    def test_should_get_available_symbols(self, loader):
+    def test_should_get_available_symbols(self, loader: CSVDataLoader) -> None:
         """Test getting available symbols."""
         symbols = loader.get_available_symbols("futures")
         assert "BTCUSDT" in symbols
 
-    def test_should_get_available_timeframes(self, loader):
+    def test_should_get_available_timeframes(self, loader: CSVDataLoader) -> None:
         """Test getting available timeframes."""
         timeframes = loader.get_available_timeframes("BTCUSDT", "futures")
         assert "1h" in timeframes
 
-    def test_should_clear_cache(self, loader):
+    def test_should_clear_cache(self, loader: CSVDataLoader) -> None:
         """Test cache clearing."""
         # Add something to cache first
         loader.cache["test"] = "value"
@@ -298,16 +312,16 @@ class TestCSVDataLoader:
         assert loader.get_cache_info()["cache_size"] == 0
 
     @pytest.mark.asyncio
-    async def test_should_raise_error_when_no_files_found(self, loader):
+    async def test_should_raise_error_when_no_files_found(self, loader: CSVDataLoader) -> None:
         """Test error when no data files are found."""
         start_date = datetime(2030, 1, 1)  # Future date
-        end_date = datetime(2030, 1, 1)
+        end_date = datetime(2030, 1, 2)  # Next day
 
-        with pytest.raises(DataError, match="No data files found"):
+        with pytest.raises(DataError, match="No valid data files found"):
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     @pytest.mark.asyncio
-    async def test_should_handle_concurrent_loading(self, loader):
+    async def test_should_handle_concurrent_loading(self, loader: CSVDataLoader) -> None:
         """Test concurrent data loading."""
         start_date = datetime(2025, 1, 1)
         end_date = datetime(2025, 1, 1, 23, 59, 59)
@@ -325,7 +339,9 @@ class TestCSVDataLoader:
             pd.testing.assert_frame_equal(results[0], result)
 
     @pytest.mark.asyncio
-    async def test_should_perform_efficiently_with_large_date_range(self, loader, temp_data_dir):
+    async def test_should_perform_efficiently_with_large_date_range(
+        self, loader: CSVDataLoader, temp_data_dir: Path
+    ) -> None:
         """Test performance with larger date ranges."""
         # Create additional test files for performance test
         binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
@@ -350,8 +366,8 @@ class TestCSVDataLoader:
             df.to_csv(file_path, index=False)
 
         # Load large date range
-        start_date = datetime(2025, 1, 1)
-        end_date = datetime(2025, 1, 13)
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 13, 23, 59, 59)  # Include full last day
 
         import time
 

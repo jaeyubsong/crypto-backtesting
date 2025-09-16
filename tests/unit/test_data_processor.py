@@ -17,12 +17,12 @@ class TestOHLCVDataProcessor:
     """Test suite for OHLCVDataProcessor."""
 
     @pytest.fixture
-    def processor(self):
+    def processor(self) -> OHLCVDataProcessor:
         """Create OHLCVDataProcessor instance."""
         return OHLCVDataProcessor()
 
     @pytest.fixture
-    def valid_data(self):
+    def valid_data(self) -> pd.DataFrame:
         """Create valid OHLCV data for testing."""
         timestamps = [1640995200000 + i * 3600000 for i in range(24)]  # 24 hours
         return pd.DataFrame(
@@ -37,7 +37,7 @@ class TestOHLCVDataProcessor:
         )
 
     @pytest.fixture
-    def invalid_ohlc_data(self):
+    def invalid_ohlc_data(self) -> pd.DataFrame:
         """Create data with invalid OHLC relationships."""
         return pd.DataFrame(
             {
@@ -50,18 +50,20 @@ class TestOHLCVDataProcessor:
             }
         )
 
-    def test_should_validate_empty_data(self, processor):
+    def test_should_validate_empty_data(self, processor: OHLCVDataProcessor) -> None:
         """Test validation of empty DataFrame."""
         empty_data = pd.DataFrame()
         result = processor.validate_data(empty_data)
         assert result is True
 
-    def test_should_validate_correct_data(self, processor, valid_data):
+    def test_should_validate_correct_data(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test validation of correct OHLCV data."""
         result = processor.validate_data(valid_data)
         assert result is True
 
-    def test_should_reject_missing_columns(self, processor):
+    def test_should_reject_missing_columns(self, processor: OHLCVDataProcessor) -> None:
         """Test validation rejects data with missing columns."""
         incomplete_data = pd.DataFrame(
             {
@@ -74,7 +76,7 @@ class TestOHLCVDataProcessor:
         with pytest.raises(ValidationError, match="Missing required columns"):
             processor.validate_data(incomplete_data)
 
-    def test_should_reject_duplicate_timestamps(self, processor):
+    def test_should_reject_duplicate_timestamps(self, processor: OHLCVDataProcessor) -> None:
         """Test validation rejects duplicate timestamps."""
         duplicate_data = pd.DataFrame(
             {
@@ -90,7 +92,7 @@ class TestOHLCVDataProcessor:
         with pytest.raises(ValidationError, match="Duplicate timestamps"):
             processor.validate_data(duplicate_data)
 
-    def test_should_reject_non_positive_prices(self, processor):
+    def test_should_reject_non_positive_prices(self, processor: OHLCVDataProcessor) -> None:
         """Test validation rejects non-positive prices."""
         invalid_price_data = pd.DataFrame(
             {
@@ -106,7 +108,7 @@ class TestOHLCVDataProcessor:
         with pytest.raises(ValidationError, match="non-positive values"):
             processor.validate_data(invalid_price_data)
 
-    def test_should_reject_negative_volume(self, processor):
+    def test_should_reject_negative_volume(self, processor: OHLCVDataProcessor) -> None:
         """Test validation rejects negative volume."""
         negative_volume_data = pd.DataFrame(
             {
@@ -122,12 +124,14 @@ class TestOHLCVDataProcessor:
         with pytest.raises(ValidationError, match="negative values"):
             processor.validate_data(negative_volume_data)
 
-    def test_should_reject_invalid_ohlc_relationships(self, processor, invalid_ohlc_data):
+    def test_should_reject_invalid_ohlc_relationships(
+        self, processor: OHLCVDataProcessor, invalid_ohlc_data: pd.DataFrame
+    ) -> None:
         """Test validation rejects invalid OHLC relationships."""
         with pytest.raises(ValidationError, match="Invalid OHLC relationships"):
             processor.validate_data(invalid_ohlc_data)
 
-    def test_should_reject_nan_values(self, processor):
+    def test_should_reject_nan_values(self, processor: OHLCVDataProcessor) -> None:
         """Test validation rejects NaN values."""
         nan_data = pd.DataFrame(
             {
@@ -143,13 +147,15 @@ class TestOHLCVDataProcessor:
         with pytest.raises(ValidationError, match="NaN values"):
             processor.validate_data(nan_data)
 
-    def test_should_clean_empty_data(self, processor):
+    def test_should_clean_empty_data(self, processor: OHLCVDataProcessor) -> None:
         """Test cleaning of empty DataFrame."""
         empty_data = pd.DataFrame()
         result = processor.clean_data(empty_data)
         assert result.empty
 
-    def test_should_remove_duplicate_timestamps_in_cleaning(self, processor):
+    def test_should_remove_duplicate_timestamps_in_cleaning(
+        self, processor: OHLCVDataProcessor
+    ) -> None:
         """Test cleaning removes duplicate timestamps."""
         duplicate_data = pd.DataFrame(
             {
@@ -167,7 +173,7 @@ class TestOHLCVDataProcessor:
         assert len(cleaned) == 2  # One duplicate removed
         assert cleaned["timestamp"].duplicated().sum() == 0
 
-    def test_should_sort_by_timestamp_in_cleaning(self, processor):
+    def test_should_sort_by_timestamp_in_cleaning(self, processor: OHLCVDataProcessor) -> None:
         """Test cleaning sorts data by timestamp."""
         unsorted_data = pd.DataFrame(
             {
@@ -185,7 +191,9 @@ class TestOHLCVDataProcessor:
         assert cleaned["timestamp"].is_monotonic_increasing
         assert cleaned["timestamp"].iloc[0] == 1640995200000  # First timestamp
 
-    def test_should_fix_ohlc_relationships_in_cleaning(self, processor, invalid_ohlc_data):
+    def test_should_fix_ohlc_relationships_in_cleaning(
+        self, processor: OHLCVDataProcessor, invalid_ohlc_data: pd.DataFrame
+    ) -> None:
         """Test cleaning fixes invalid OHLC relationships."""
         cleaned = processor.clean_data(invalid_ohlc_data)
 
@@ -209,7 +217,7 @@ class TestOHLCVDataProcessor:
             ]
             assert cleaned["low"].iloc[i] == min(row_values)
 
-    def test_should_handle_missing_values_in_cleaning(self, processor):
+    def test_should_handle_missing_values_in_cleaning(self, processor: OHLCVDataProcessor) -> None:
         """Test cleaning handles missing values."""
         missing_data = pd.DataFrame(
             {
@@ -232,13 +240,13 @@ class TestOHLCVDataProcessor:
         # Volume NaN should be filled with 0
         assert cleaned["volume"].iloc[1] == 0
 
-    def test_should_resample_empty_data(self, processor):
+    def test_should_resample_empty_data(self, processor: OHLCVDataProcessor) -> None:
         """Test resampling of empty DataFrame."""
         empty_data = pd.DataFrame()
         result = processor.resample_data(empty_data, "1d")
         assert result.empty
 
-    def test_should_resample_to_higher_timeframe(self, processor):
+    def test_should_resample_to_higher_timeframe(self, processor: OHLCVDataProcessor) -> None:
         """Test resampling from 1h to 1d timeframe."""
         # Create hourly data for 2 days (48 hours)
         timestamps = [1640995200000 + i * 3600000 for i in range(48)]
@@ -265,12 +273,14 @@ class TestOHLCVDataProcessor:
         assert resampled["close"].iloc[0] == 50073  # Last close of day
         assert resampled["volume"].iloc[0] == 2400  # Sum of volumes (24 * 100)
 
-    def test_should_reject_invalid_timeframe_in_resampling(self, processor, valid_data):
+    def test_should_reject_invalid_timeframe_in_resampling(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test resampling rejects invalid timeframes."""
         with pytest.raises(ValidationError, match="Unsupported timeframe"):
             processor.resample_data(valid_data, "invalid_timeframe")
 
-    def test_should_calculate_basic_indicators(self, processor):
+    def test_should_calculate_basic_indicators(self, processor: OHLCVDataProcessor) -> None:
         """Test calculation of basic technical indicators."""
         # Create enough data for indicators (need at least 50 periods for SMA50)
         timestamps = [1640995200000 + i * 3600000 for i in range(100)]
@@ -315,7 +325,9 @@ class TestOHLCVDataProcessor:
         assert (rsi_values >= 0).all()
         assert (rsi_values <= 100).all()
 
-    def test_should_handle_insufficient_data_for_indicators(self, processor, valid_data):
+    def test_should_handle_insufficient_data_for_indicators(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test indicator calculation with insufficient data."""
         # Use small dataset (24 rows) - not enough for some indicators
         result = processor.calculate_basic_indicators(valid_data)
@@ -328,7 +340,9 @@ class TestOHLCVDataProcessor:
         assert pd.isna(result["sma_20"].iloc[0])
         assert pd.isna(result["sma_50"].iloc[0])
 
-    def test_should_get_data_summary_for_valid_data(self, processor, valid_data):
+    def test_should_get_data_summary_for_valid_data(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test data summary generation for valid data."""
         summary = processor.get_data_summary(valid_data)
 
@@ -351,7 +365,7 @@ class TestOHLCVDataProcessor:
         assert data_quality["missing_values"] == 0
         assert data_quality["duplicate_timestamps"] == 0
 
-    def test_should_get_data_summary_for_empty_data(self, processor):
+    def test_should_get_data_summary_for_empty_data(self, processor: OHLCVDataProcessor) -> None:
         """Test data summary for empty DataFrame."""
         empty_data = pd.DataFrame()
         summary = processor.get_data_summary(empty_data)
@@ -359,7 +373,9 @@ class TestOHLCVDataProcessor:
         assert summary["status"] == "empty"
         assert summary["rows"] == 0
 
-    def test_should_handle_data_summary_errors_gracefully(self, processor):
+    def test_should_handle_data_summary_errors_gracefully(
+        self, processor: OHLCVDataProcessor
+    ) -> None:
         """Test data summary handles errors gracefully."""
         # Create invalid data that might cause summary calculation errors
         invalid_data = pd.DataFrame({"invalid_column": [1, 2, 3]})
@@ -370,7 +386,9 @@ class TestOHLCVDataProcessor:
         assert "error" in summary
         assert summary["rows"] == 3
 
-    def test_should_calculate_price_change_in_summary(self, processor, valid_data):
+    def test_should_calculate_price_change_in_summary(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test price change calculation in data summary."""
         summary = processor.get_data_summary(valid_data)
 
@@ -381,7 +399,7 @@ class TestOHLCVDataProcessor:
         assert abs(price_stats["total_change"] - expected_change) < 0.001
         assert abs(price_stats["total_change_pct"] - expected_change_pct) < 0.001
 
-    def test_should_handle_cleaning_errors_gracefully(self, processor):
+    def test_should_handle_cleaning_errors_gracefully(self, processor: OHLCVDataProcessor) -> None:
         """Test that cleaning handles errors gracefully."""
         # Create problematic data that might cause cleaning to fail
         problematic_data = pd.DataFrame(
@@ -398,13 +416,17 @@ class TestOHLCVDataProcessor:
         with pytest.raises(DataError, match="Failed to clean data"):
             processor.clean_data(problematic_data)
 
-    def test_should_handle_resampling_errors_gracefully(self, processor, valid_data):
+    def test_should_handle_resampling_errors_gracefully(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test that resampling handles errors gracefully."""
         # Try to resample with invalid frequency
         with pytest.raises(ValidationError, match="Unsupported timeframe"):
             processor.resample_data(valid_data, "2h")  # Not in our supported list
 
-    def test_should_maintain_data_types_after_processing(self, processor, valid_data):
+    def test_should_maintain_data_types_after_processing(
+        self, processor: OHLCVDataProcessor, valid_data: pd.DataFrame
+    ) -> None:
         """Test that data types are maintained after processing."""
         cleaned = processor.clean_data(valid_data)
 
@@ -413,7 +435,7 @@ class TestOHLCVDataProcessor:
         for col in ["open", "high", "low", "close", "volume"]:
             assert pd.api.types.is_numeric_dtype(cleaned[col])
 
-    def test_should_handle_large_dataset_efficiently(self, processor):
+    def test_should_handle_large_dataset_efficiently(self, processor: OHLCVDataProcessor) -> None:
         """Test processing efficiency with large datasets."""
         # Create large dataset (10,000 rows)
         n_rows = 10000
