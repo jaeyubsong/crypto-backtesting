@@ -1,0 +1,363 @@
+"""
+Unit tests for CSV data loader.
+
+Tests cover data loading, caching, validation, and error handling
+for the CSVDataLoader class.
+"""
+
+import asyncio
+import shutil
+import tempfile
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from src.core.exceptions.backtest import DataError, ValidationError
+from src.infrastructure.data.csv_loader import CSVDataLoader
+
+
+class TestCSVDataLoader:
+    """Test suite for CSVDataLoader."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory with sample files."""
+        temp_dir = Path(tempfile.mkdtemp())
+
+        try:
+            # Create directory structure
+            binance_dir = temp_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+            binance_dir.mkdir(parents=True)
+
+            # Create sample CSV files for 3 consecutive days
+            base_date = datetime(2025, 1, 1)
+            for i in range(3):
+                date = base_date + timedelta(days=i)
+                file_path = binance_dir / f"BTCUSDT_1h_{date.strftime('%Y-%m-%d')}.csv"
+
+                # Create sample OHLCV data for 24 hours (1 row per hour)
+                timestamps = []
+                opens = []
+                highs = []
+                lows = []
+                closes = []
+                volumes = []
+
+                base_timestamp = int(date.timestamp() * 1000)
+                base_price = 50000 + i * 1000  # Different price for each day
+
+                for hour in range(24):
+                    timestamp = base_timestamp + (hour * 3600 * 1000)
+                    open_price = base_price + hour * 10
+                    high_price = open_price + 50
+                    low_price = open_price - 30
+                    close_price = open_price + 20
+                    volume = 100 + hour * 5
+
+                    timestamps.append(timestamp)
+                    opens.append(open_price)
+                    highs.append(high_price)
+                    lows.append(low_price)
+                    closes.append(close_price)
+                    volumes.append(volume)
+
+                # Create DataFrame and save to CSV
+                df = pd.DataFrame(
+                    {
+                        "timestamp": timestamps,
+                        "open": opens,
+                        "high": highs,
+                        "low": lows,
+                        "close": closes,
+                        "volume": volumes,
+                    }
+                )
+                df.to_csv(file_path, index=False)
+
+            yield temp_dir
+
+        finally:
+            shutil.rmtree(temp_dir)
+
+    @pytest.fixture
+    def loader(self, temp_data_dir):
+        """Create CSVDataLoader instance with test data directory."""
+        return CSVDataLoader(data_directory=str(temp_data_dir), cache_size=10)
+
+    def test_should_initialize_with_valid_directory(self, temp_data_dir):
+        """Test loader initializes with valid data directory."""
+        loader = CSVDataLoader(data_directory=str(temp_data_dir))
+        assert loader.data_dir == temp_data_dir
+        assert loader.cache.maxsize == 100  # default cache size
+
+    def test_should_raise_error_for_invalid_directory(self):
+        """Test loader raises error for non-existent directory."""
+        with pytest.raises(DataError, match="Data directory not found"):
+            CSVDataLoader(data_directory="/nonexistent/path")
+
+    def test_should_raise_error_for_missing_binance_directory(self, temp_data_dir):
+        """Test loader raises error when binance directory is missing."""
+        # Remove binance directory
+        binance_dir = temp_data_dir / "binance"
+        shutil.rmtree(binance_dir)
+
+        with pytest.raises(DataError, match="Binance data directory not found"):
+            CSVDataLoader(data_directory=str(temp_data_dir))
+
+    @pytest.mark.asyncio
+    async def test_should_load_data_for_single_day(self, loader):
+        """Test loading data for a single day."""
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        assert isinstance(data, pd.DataFrame)
+        assert len(data) == 24  # 24 hours of data
+        assert list(data.columns) == ["timestamp", "open", "high", "low", "close", "volume"]
+        assert data["open"].iloc[0] == 50000  # First price
+        assert data["volume"].iloc[0] == 100  # First volume
+
+    @pytest.mark.asyncio
+    async def test_should_load_data_for_multiple_days(self, loader):
+        """Test loading data across multiple days."""
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 3, 23, 59, 59)
+
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        assert len(data) == 72  # 3 days * 24 hours
+        assert data["timestamp"].is_monotonic_increasing  # Should be sorted
+
+        # Check first and last rows
+        assert data["open"].iloc[0] == 50000  # Day 1 first price
+        assert data["open"].iloc[24] == 51000  # Day 2 first price
+        assert data["open"].iloc[48] == 52000  # Day 3 first price
+
+    @pytest.mark.asyncio
+    async def test_should_filter_by_exact_date_range(self, loader):
+        """Test data is filtered to exact date range."""
+        # Request only first 12 hours of first day
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 1, 11, 59, 59)
+
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        assert len(data) == 12  # Only first 12 hours
+
+        # Verify timestamp range
+        first_ts = pd.to_datetime(data["timestamp"].iloc[0], unit="ms", utc=True)
+        last_ts = pd.to_datetime(data["timestamp"].iloc[-1], unit="ms", utc=True)
+
+        assert first_ts >= start_date.replace(tzinfo=pd.Timestamp.now().tz)
+        assert last_ts <= end_date.replace(tzinfo=pd.Timestamp.now().tz)
+
+    @pytest.mark.asyncio
+    async def test_should_handle_missing_files_gracefully(self, loader):
+        """Test loader handles missing files without crashing."""
+        # Request data that includes missing days
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 10)  # Includes missing days 4-10
+
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        # Should return data for available days only (days 1-3)
+        assert len(data) == 72  # 3 days of available data
+        assert not data.empty
+
+    @pytest.mark.asyncio
+    async def test_should_cache_loaded_files(self, loader):
+        """Test that loaded files are cached for performance."""
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        # Load data twice
+        data1 = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+        data2 = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        # Should be identical
+        pd.testing.assert_frame_equal(data1, data2)
+
+        # Check cache has entries
+        cache_info = loader.get_cache_info()
+        assert cache_info["cache_size"] > 0
+
+    @pytest.mark.asyncio
+    async def test_should_validate_input_parameters(self, loader):
+        """Test input parameter validation."""
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 2)
+
+        # Empty symbol
+        with pytest.raises(ValidationError, match="Symbol cannot be empty"):
+            await loader.load_data("", "1h", start_date, end_date)
+
+        # Empty timeframe
+        with pytest.raises(ValidationError, match="Timeframe cannot be empty"):
+            await loader.load_data("BTCUSDT", "", start_date, end_date)
+
+        # Invalid date range
+        with pytest.raises(ValidationError, match="start_date must be before end_date"):
+            await loader.load_data("BTCUSDT", "1h", end_date, start_date)
+
+        # Invalid timeframe
+        with pytest.raises(ValidationError, match="Unsupported timeframe"):
+            await loader.load_data("BTCUSDT", "invalid", start_date, end_date)
+
+        # Invalid trading mode
+        with pytest.raises(ValidationError, match="Invalid trading mode"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date, "invalid")
+
+    @pytest.mark.asyncio
+    async def test_should_validate_csv_structure(self, loader, temp_data_dir):
+        """Test CSV structure validation."""
+        # Create invalid CSV file
+        invalid_file = (
+            temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h" / "BTCUSDT_1h_2025-01-10.csv"
+        )
+
+        # CSV missing required columns
+        invalid_df = pd.DataFrame(
+            {
+                "timestamp": [1735689600000],
+                "open": [50000],
+                # missing high, low, close, volume
+            }
+        )
+        invalid_df.to_csv(invalid_file, index=False)
+
+        start_date = datetime(2025, 1, 10)
+        end_date = datetime(2025, 1, 10)
+
+        with pytest.raises(DataError, match="missing columns"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+    @pytest.mark.asyncio
+    async def test_should_validate_ohlc_relationships(self, loader, temp_data_dir):
+        """Test OHLC relationship validation."""
+        # Create CSV with invalid OHLC relationships
+        invalid_file = (
+            temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h" / "BTCUSDT_1h_2025-01-11.csv"
+        )
+
+        invalid_df = pd.DataFrame(
+            {
+                "timestamp": [1735689600000],
+                "open": [50000],
+                "high": [49000],  # High less than open (invalid)
+                "low": [51000],  # Low greater than open (invalid)
+                "close": [50500],
+                "volume": [100],
+            }
+        )
+        invalid_df.to_csv(invalid_file, index=False)
+
+        start_date = datetime(2025, 1, 11)
+        end_date = datetime(2025, 1, 11)
+
+        with pytest.raises(DataError, match="Invalid OHLC relationships"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+    @pytest.mark.asyncio
+    async def test_should_handle_empty_csv_files(self, loader, temp_data_dir):
+        """Test handling of empty CSV files."""
+        # Create empty CSV file
+        empty_file = (
+            temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h" / "BTCUSDT_1h_2025-01-12.csv"
+        )
+        empty_file.write_text("timestamp,open,high,low,close,volume\n")  # Header only
+
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 12)
+
+        # Should load successfully, ignoring empty file
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        # Should have data from available days (1-3)
+        assert len(data) == 72
+
+    def test_should_get_available_symbols(self, loader):
+        """Test getting available symbols."""
+        symbols = loader.get_available_symbols("futures")
+        assert "BTCUSDT" in symbols
+
+    def test_should_get_available_timeframes(self, loader):
+        """Test getting available timeframes."""
+        timeframes = loader.get_available_timeframes("BTCUSDT", "futures")
+        assert "1h" in timeframes
+
+    def test_should_clear_cache(self, loader):
+        """Test cache clearing."""
+        # Add something to cache first
+        loader.cache["test"] = "value"
+        assert loader.get_cache_info()["cache_size"] == 1
+
+        loader.clear_cache()
+        assert loader.get_cache_info()["cache_size"] == 0
+
+    @pytest.mark.asyncio
+    async def test_should_raise_error_when_no_files_found(self, loader):
+        """Test error when no data files are found."""
+        start_date = datetime(2030, 1, 1)  # Future date
+        end_date = datetime(2030, 1, 1)
+
+        with pytest.raises(DataError, match="No data files found"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+    @pytest.mark.asyncio
+    async def test_should_handle_concurrent_loading(self, loader):
+        """Test concurrent data loading."""
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        # Load same data concurrently
+        tasks = []
+        for _ in range(5):
+            task = loader.load_data("BTCUSDT", "1h", start_date, end_date)
+            tasks.append(task)
+
+        results = await asyncio.gather(*tasks)
+
+        # All results should be identical
+        for result in results[1:]:
+            pd.testing.assert_frame_equal(results[0], result)
+
+    @pytest.mark.asyncio
+    async def test_should_perform_efficiently_with_large_date_range(self, loader, temp_data_dir):
+        """Test performance with larger date ranges."""
+        # Create additional test files for performance test
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+
+        # Add 10 more days of data
+        base_date = datetime(2025, 1, 4)
+        for i in range(10):
+            date = base_date + timedelta(days=i)
+            file_path = binance_dir / f"BTCUSDT_1h_{date.strftime('%Y-%m-%d')}.csv"
+
+            # Minimal data for performance
+            df = pd.DataFrame(
+                {
+                    "timestamp": [int((date.timestamp() + h * 3600) * 1000) for h in range(24)],
+                    "open": [50000] * 24,
+                    "high": [50100] * 24,
+                    "low": [49900] * 24,
+                    "close": [50000] * 24,
+                    "volume": [100] * 24,
+                }
+            )
+            df.to_csv(file_path, index=False)
+
+        # Load large date range
+        start_date = datetime(2025, 1, 1)
+        end_date = datetime(2025, 1, 13)
+
+        import time
+
+        start_time = time.time()
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+        load_time = time.time() - start_time
+
+        assert len(data) == 24 * 13  # 13 days of data
+        assert load_time < 5.0  # Should load in under 5 seconds
