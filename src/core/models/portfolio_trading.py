@@ -8,9 +8,9 @@ following the Single Responsibility Principle for trading logic.
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from src.core.constants import DEFAULT_TAKER_FEE
+from src.core.constants import DEFAULT_TAKER_FEE, MIN_TRADE_SIZE
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
-from src.core.exceptions.backtest import InsufficientFundsError
+from src.core.exceptions.backtest import InsufficientFundsError, ValidationError
 from src.core.models.position import Position, Trade
 
 from .portfolio_helpers import (
@@ -129,6 +129,13 @@ class PortfolioTrading:
                     # Calculate new average entry price
                     total_size = existing.size + amount
                     total_value = (existing.size * existing.entry_price) + (amount * price)
+
+                    # Validate against divide-by-zero in position averaging
+                    if abs(total_size) < MIN_TRADE_SIZE:
+                        raise ValidationError(
+                            f"Invalid position averaging: total size {total_size} too small"
+                        )
+
                     new_entry_price = total_value / total_size
 
                     # Update position

@@ -141,17 +141,9 @@ class PortfolioCore:
             if len(self.portfolio_history) > MAX_PORTFOLIO_HISTORY:
                 # Keep only the most recent PORTFOLIO_HISTORY_TRIM_TO entries + 1 new entry
                 entries_to_keep = PORTFOLIO_HISTORY_TRIM_TO + 1
-                if hasattr(self.portfolio_history, "popleft"):
-                    # For deque, remove from left
-                    trim_count = len(self.portfolio_history) - entries_to_keep
-                    for _ in range(trim_count):
-                        self.portfolio_history.popleft()
-                else:
-                    # For list, slice to keep only the most recent entries
-                    if isinstance(self.portfolio_history, list):
-                        self.portfolio_history[:] = self.portfolio_history[-entries_to_keep:]
-                    else:
-                        # Fallback: convert to list, slice, and convert back
-                        temp_list = list(self.portfolio_history)
-                        self.portfolio_history.clear()
-                        self.portfolio_history.extend(temp_list[-entries_to_keep:])
+
+                # Efficient bulk trimming for deque: create new deque with recent entries
+                # This is O(entries_to_keep) instead of O(trim_count) for loop-based popleft()
+                recent_entries = list(self.portfolio_history)[-entries_to_keep:]
+                self.portfolio_history.clear()
+                self.portfolio_history.extend(recent_entries)

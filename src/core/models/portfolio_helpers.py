@@ -251,6 +251,13 @@ class PositionManager:
 
         total_size = position_size + additional_size
         total_value = (position_size * position_price) + (additional_size * additional_price)
+
+        # Validate against divide-by-zero in position averaging
+        if abs(total_size) < MIN_TRADE_SIZE:
+            raise ValidationError(
+                f"Invalid position update: total size {total_size} too small for averaging calculation"
+            )
+
         position.entry_price = total_value / total_size
         position.size = total_size
         position.margin_used = position_margin + additional_margin

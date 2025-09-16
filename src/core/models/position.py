@@ -83,16 +83,13 @@ class Position:
         current_price_rounded = round_price(current_price)
         margin_rate = maintenance_margin_rate
 
-        # Calculate unrealized PnL with validation
+        # Calculate unrealized PnL (already validated in calculate_pnl)
         unrealized_pnl = self.unrealized_pnl(current_price_rounded)
 
-        # Validate liquidation calculation inputs
+        # Position value at entry (validate since this is a new calculation)
+        position_value = abs(self.size) * self.entry_price
         from src.core.types.financial import validate_safe_float_range
 
-        validate_safe_float_range(unrealized_pnl, "unrealized_pnl in liquidation check")
-
-        # Position value at entry
-        position_value = abs(self.size) * self.entry_price
         validate_safe_float_range(position_value, "position_value in liquidation check")
 
         # Maintenance margin requirement
