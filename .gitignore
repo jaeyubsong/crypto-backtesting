@@ -35,8 +35,8 @@ env/
 .DS_Store
 
 # Project specific
-data/
-results/
+/data/
+/results/
 *.csv
 *.json
 *.log
