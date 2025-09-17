@@ -43,27 +43,41 @@ class OHLCVDataProcessor(IDataProcessor):
         if data.empty:
             return True  # Empty data is valid
 
-        # Check required columns
+        # Perform comprehensive validation checks
+        self._validate_data_structure(data)
+        self._validate_data_types(data)
+        self._validate_data_values(data)
+        self._validate_ohlc_relationships(data)
+        self._validate_data_quality(data)
+
+        return True
+
+    def _validate_data_structure(self, data: pd.DataFrame) -> None:
+        """Validate basic data structure requirements."""
         required_columns = ["timestamp", "open", "high", "low", "close", "volume"]
         missing_columns = set(required_columns) - set(data.columns)
         if missing_columns:
             raise ValidationError(f"Missing required columns: {missing_columns}")
 
-        # Check for duplicates
+        # Check for duplicate timestamps
         if data["timestamp"].duplicated().any():
             raise ValidationError("Duplicate timestamps found in data")
 
-        # Validate data types
+    def _validate_data_types(self, data: pd.DataFrame) -> None:
+        """Validate data types for numeric columns."""
         numeric_columns = ["open", "high", "low", "close", "volume"]
         for col in numeric_columns:
             if not pd.api.types.is_numeric_dtype(data[col]):
                 raise ValidationError(f"Column {col} must be numeric")
 
-        # Check for NaN values
+        # Check for NaN values in all required columns
+        required_columns = ["timestamp", "open", "high", "low", "close", "volume"]
         for col in required_columns:
             if data[col].isna().any():
                 raise ValidationError(f"Column {col} contains NaN values")
 
+    def _validate_data_values(self, data: pd.DataFrame) -> None:
+        """Validate value ranges for prices and volume."""
         # Validate price ranges
         price_columns = ["open", "high", "low", "close"]
         for col in price_columns:
@@ -74,7 +88,8 @@ class OHLCVDataProcessor(IDataProcessor):
         if (data["volume"] < 0).any():
             raise ValidationError("Volume column contains negative values")
 
-        # Validate OHLC relationships
+    def _validate_ohlc_relationships(self, data: pd.DataFrame) -> None:
+        """Validate OHLC price relationships."""
         invalid_ohlc = (
             (data["high"] < data["low"])
             | (data["high"] < data["open"])
@@ -87,6 +102,8 @@ class OHLCVDataProcessor(IDataProcessor):
             invalid_count = invalid_ohlc.sum()
             raise ValidationError(f"Invalid OHLC relationships found in {invalid_count} rows")
 
+    def _validate_data_quality(self, data: pd.DataFrame) -> None:
+        """Validate data quality and provide warnings for anomalies."""
         # Check for reasonable price variations
         daily_range = (data["high"] - data["low"]) / data["low"]
         extreme_moves = daily_range > 0.5  # More than 50% daily range
@@ -98,8 +115,6 @@ class OHLCVDataProcessor(IDataProcessor):
         # Validate timestamp ordering
         if not data["timestamp"].is_monotonic_increasing:
             logger.warning("Timestamps are not in ascending order")
-
-        return True
 
     def clean_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -117,49 +132,66 @@ class OHLCVDataProcessor(IDataProcessor):
         if data.empty:
             return data
 
-        cleaned_data = data.copy()
-
         try:
-            # Validate timestamp data type first
-            if not pd.api.types.is_numeric_dtype(cleaned_data["timestamp"]):
-                raise DataError("Timestamp column must be numeric (milliseconds since epoch)")
+            cleaned_data = data.copy()
 
-            # Remove duplicate timestamps (keep first occurrence)
-            duplicate_mask = cleaned_data["timestamp"].duplicated(keep="first")
-            if duplicate_mask.any():
-                duplicate_count = duplicate_mask.sum()
-                logger.warning(f"Removing {duplicate_count} duplicate timestamps")
-                cleaned_data = cleaned_data[~duplicate_mask]
-
-            # Sort by timestamp
-            cleaned_data = cleaned_data.sort_values("timestamp").reset_index(drop=True)
-
-            # Handle missing values
-            cleaned_data = self._handle_missing_values(cleaned_data)
-
-            # Fix invalid OHLC relationships
-            cleaned_data = self._fix_ohlc_relationships(cleaned_data)
-
-            # Ensure volume is non-negative
-            cleaned_data["volume"] = cleaned_data["volume"].clip(lower=0)
-
-            # Round prices to reasonable precision
-            price_columns = ["open", "high", "low", "close"]
-            for col in price_columns:
-                cleaned_data[col] = cleaned_data[col].round(8)
-
-            # Round volume to reasonable precision
-            cleaned_data["volume"] = cleaned_data["volume"].round(8)
+            # Perform data cleaning steps
+            cleaned_data = self._validate_and_prepare_timestamps(cleaned_data)
+            cleaned_data = self._remove_duplicates_and_sort(cleaned_data)
+            cleaned_data = self._clean_data_values(cleaned_data)
+            cleaned_data = self._normalize_precision(cleaned_data)
 
             # Final validation
             self.validate_data(cleaned_data)
-
             logger.info(f"Cleaned data: {len(data)} -> {len(cleaned_data)} rows")
 
             return cleaned_data
 
         except Exception as e:
             raise DataError(f"Failed to clean data: {str(e)}") from e
+
+    def _validate_and_prepare_timestamps(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Validate and prepare timestamp data for processing."""
+        if not pd.api.types.is_numeric_dtype(data["timestamp"]):
+            raise DataError("Timestamp column must be numeric (milliseconds since epoch)")
+        return data
+
+    def _remove_duplicates_and_sort(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Remove duplicate timestamps and sort data chronologically."""
+        # Remove duplicate timestamps (keep first occurrence)
+        duplicate_mask = data["timestamp"].duplicated(keep="first")
+        if duplicate_mask.any():
+            duplicate_count = duplicate_mask.sum()
+            logger.warning(f"Removing {duplicate_count} duplicate timestamps")
+            data = data[~duplicate_mask]
+
+        # Sort by timestamp
+        return data.sort_values("timestamp").reset_index(drop=True)
+
+    def _clean_data_values(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Clean and fix data values including missing values and OHLC relationships."""
+        # Handle missing values
+        data = self._handle_missing_values(data)
+
+        # Fix invalid OHLC relationships
+        data = self._fix_ohlc_relationships(data)
+
+        # Ensure volume is non-negative
+        data["volume"] = data["volume"].clip(lower=0)
+
+        return data
+
+    def _normalize_precision(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Normalize numerical precision for prices and volume."""
+        # Round prices to reasonable precision
+        price_columns = ["open", "high", "low", "close"]
+        for col in price_columns:
+            data[col] = data[col].round(8)
+
+        # Round volume to reasonable precision
+        data["volume"] = data["volume"].round(8)
+
+        return data
 
     def _handle_missing_values(self, data: pd.DataFrame) -> pd.DataFrame:
         """Handle missing values in OHLCV data."""
@@ -312,48 +344,66 @@ class OHLCVDataProcessor(IDataProcessor):
         if data.empty:
             return data
 
-        result = data.copy()
-
         try:
-            # Simple moving averages
-            result["sma_20"] = result["close"].rolling(window=20).mean()
-            result["sma_50"] = result["close"].rolling(window=50).mean()
+            result = data.copy()
 
-            # Exponential moving averages
-            result["ema_12"] = result["close"].ewm(span=12).mean()
-            result["ema_26"] = result["close"].ewm(span=26).mean()
-
-            # MACD
-            result["macd"] = result["ema_12"] - result["ema_26"]
-            result["macd_signal"] = result["macd"].ewm(span=9).mean()
-            result["macd_histogram"] = result["macd"] - result["macd_signal"]
-
-            # RSI
-            delta = result["close"].diff()
-            gain = delta.where(delta > 0, 0).rolling(window=14).mean()
-            loss = (-delta).where(delta < 0, 0).rolling(window=14).mean()
-            rs = gain / loss
-            result["rsi"] = 100 - (100 / (1 + rs))
-
-            # Bollinger Bands
-            bb_middle = result["close"].rolling(window=20).mean()
-            bb_std = result["close"].rolling(window=20).std()
-            result["bb_upper"] = bb_middle + (2 * bb_std)
-            result["bb_lower"] = bb_middle - (2 * bb_std)
-            result["bb_middle"] = bb_middle
-
-            # Volume-weighted average price (VWAP)
-            vwap_num = (result["close"] * result["volume"]).cumsum()
-            vwap_den = result["volume"].cumsum()
-            result["vwap"] = vwap_num / vwap_den
+            # Calculate different indicator categories
+            result = self._add_moving_averages(result)
+            result = self._add_macd_indicators(result)
+            result = self._add_rsi_indicator(result)
+            result = self._add_bollinger_bands(result)
+            result = self._add_vwap_indicator(result)
 
             logger.info(f"Calculated basic indicators for {len(result)} rows")
-
             return result
 
         except Exception as e:
             logger.error(f"Failed to calculate indicators: {str(e)}")
             return data  # Return original data if indicator calculation fails
+
+    def _add_moving_averages(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add simple and exponential moving averages."""
+        # Simple moving averages
+        data["sma_20"] = data["close"].rolling(window=20).mean()
+        data["sma_50"] = data["close"].rolling(window=50).mean()
+
+        # Exponential moving averages
+        data["ema_12"] = data["close"].ewm(span=12).mean()
+        data["ema_26"] = data["close"].ewm(span=26).mean()
+
+        return data
+
+    def _add_macd_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add MACD (Moving Average Convergence Divergence) indicators."""
+        data["macd"] = data["ema_12"] - data["ema_26"]
+        data["macd_signal"] = data["macd"].ewm(span=9).mean()
+        data["macd_histogram"] = data["macd"] - data["macd_signal"]
+        return data
+
+    def _add_rsi_indicator(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add RSI (Relative Strength Index) indicator."""
+        delta = data["close"].diff()
+        gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+        loss = (-delta).where(delta < 0, 0).rolling(window=14).mean()
+        rs = gain / loss
+        data["rsi"] = 100 - (100 / (1 + rs))
+        return data
+
+    def _add_bollinger_bands(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add Bollinger Bands indicators."""
+        bb_middle = data["close"].rolling(window=20).mean()
+        bb_std = data["close"].rolling(window=20).std()
+        data["bb_upper"] = bb_middle + (2 * bb_std)
+        data["bb_lower"] = bb_middle - (2 * bb_std)
+        data["bb_middle"] = bb_middle
+        return data
+
+    def _add_vwap_indicator(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add VWAP (Volume Weighted Average Price) indicator."""
+        vwap_num = (data["close"] * data["volume"]).cumsum()
+        vwap_den = data["volume"].cumsum()
+        data["vwap"] = vwap_num / vwap_den
+        return data
 
     def get_data_summary(self, data: pd.DataFrame) -> dict[str, Any]:
         """
@@ -372,35 +422,55 @@ class OHLCVDataProcessor(IDataProcessor):
             summary = {
                 "status": "valid",
                 "rows": len(data),
-                "start_time": pd.to_datetime(
-                    data["timestamp"].iloc[0], unit="ms", utc=True
-                ).isoformat(),
-                "end_time": pd.to_datetime(
-                    data["timestamp"].iloc[-1], unit="ms", utc=True
-                ).isoformat(),
-                "price_stats": {
-                    "min_low": float(data["low"].min()),
-                    "max_high": float(data["high"].max()),
-                    "first_open": float(data["open"].iloc[0]),
-                    "last_close": float(data["close"].iloc[-1]),
-                    "total_volume": float(data["volume"].sum()),
-                    "avg_volume": float(data["volume"].mean()),
-                },
-                "data_quality": {
-                    "missing_values": int(data.isna().sum().sum()),
-                    "duplicate_timestamps": int(data["timestamp"].duplicated().sum()),
-                    "zero_volume_periods": int((data["volume"] == 0).sum()),
-                },
             }
 
-            # Calculate price change
-            if len(data) > 0:
-                price_change = data["close"].iloc[-1] - data["open"].iloc[0]
-                price_change_pct = (price_change / data["open"].iloc[0]) * 100
-                summary["price_stats"]["total_change"] = float(price_change)
-                summary["price_stats"]["total_change_pct"] = float(price_change_pct)
+            # Add time information
+            summary.update(self._get_time_statistics(data))
+
+            # Add price statistics
+            summary["price_stats"] = self._get_price_statistics(data)
+
+            # Add data quality metrics
+            summary["data_quality"] = self._get_data_quality_metrics(data)
 
             return summary
 
         except Exception as e:
             return {"status": "error", "error": str(e), "rows": len(data)}
+
+    def _get_time_statistics(self, data: pd.DataFrame) -> dict[str, str]:
+        """Extract time-related statistics from data."""
+        return {
+            "start_time": pd.to_datetime(
+                data["timestamp"].iloc[0], unit="ms", utc=True
+            ).isoformat(),
+            "end_time": pd.to_datetime(data["timestamp"].iloc[-1], unit="ms", utc=True).isoformat(),
+        }
+
+    def _get_price_statistics(self, data: pd.DataFrame) -> dict[str, float]:
+        """Calculate comprehensive price statistics."""
+        price_stats = {
+            "min_low": float(data["low"].min()),
+            "max_high": float(data["high"].max()),
+            "first_open": float(data["open"].iloc[0]),
+            "last_close": float(data["close"].iloc[-1]),
+            "total_volume": float(data["volume"].sum()),
+            "avg_volume": float(data["volume"].mean()),
+        }
+
+        # Add price change calculations
+        if len(data) > 0:
+            price_change = data["close"].iloc[-1] - data["open"].iloc[0]
+            price_change_pct = (price_change / data["open"].iloc[0]) * 100
+            price_stats["total_change"] = float(price_change)
+            price_stats["total_change_pct"] = float(price_change_pct)
+
+        return price_stats
+
+    def _get_data_quality_metrics(self, data: pd.DataFrame) -> dict[str, int]:
+        """Calculate data quality metrics."""
+        return {
+            "missing_values": int(data.isna().sum().sum()),
+            "duplicate_timestamps": int(data["timestamp"].duplicated().sum()),
+            "zero_volume_periods": int((data["volume"] == 0).sum()),
+        }

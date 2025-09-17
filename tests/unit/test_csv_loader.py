@@ -377,3 +377,227 @@ class TestCSVDataLoader:
 
         assert len(data) == 24 * 13  # 13 days of data
         assert load_time < 5.0  # Should load in under 5 seconds
+
+    async def test_should_use_chunked_processing_for_large_datasets(
+        self, temp_data_dir: Path
+    ) -> None:
+        """Test chunked processing is triggered for large datasets."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Create binance directory structure
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+        binance_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create 35 files to trigger chunked processing (threshold is 30)
+        base_date = datetime(2025, 1, 1)
+        for i in range(35):
+            date = base_date + timedelta(days=i)
+            file_path = binance_dir / f"BTCUSDT_1h_{date.strftime('%Y-%m-%d')}.csv"
+
+            df = pd.DataFrame(
+                {
+                    "timestamp": [int((date.timestamp() + h * 3600) * 1000) for h in range(4)],
+                    "open": [50000] * 4,
+                    "high": [50100] * 4,
+                    "low": [49900] * 4,
+                    "close": [50000] * 4,
+                    "volume": [100] * 4,
+                }
+            )
+            df.to_csv(file_path, index=False)
+
+        # Load large date range to trigger chunked processing
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 2, 4, 23, 59, 59)
+
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        # Verify data was loaded correctly through chunked processing
+        assert len(data) > 0
+        assert data["timestamp"].is_monotonic_increasing
+
+    async def test_should_reject_path_traversal_in_symbol(self, temp_data_dir: Path) -> None:
+        """Test path traversal protection in symbol parameter."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 2, 0, 0, 0)
+
+        # Test various path traversal attempts in symbol
+        with pytest.raises(ValidationError, match="contains path traversal characters"):
+            await loader.load_data("../../../etc/passwd", "1h", start_date, end_date)
+
+        with pytest.raises(ValidationError, match="contains path traversal characters"):
+            await loader.load_data("..\\..\\windows\\system32", "1h", start_date, end_date)
+
+    async def test_should_reject_path_traversal_in_timeframe(self, temp_data_dir: Path) -> None:
+        """Test path traversal protection in timeframe parameter."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 2, 0, 0, 0)
+
+        # Test path traversal in timeframe
+        with pytest.raises(ValidationError, match="contains path traversal characters"):
+            await loader.load_data("BTCUSDT", "../secrets", start_date, end_date)
+
+    async def test_should_reject_invalid_characters_in_paths(self, temp_data_dir: Path) -> None:
+        """Test rejection of invalid characters in path components."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 2, 0, 0, 0)
+
+        # Test invalid characters
+        with pytest.raises(ValidationError, match="contains invalid characters"):
+            await loader.load_data("BTC<>USDT", "1h", start_date, end_date)
+
+        with pytest.raises(ValidationError, match="contains invalid characters"):
+            await loader.load_data("BTCUSDT", "1h|dangerous", start_date, end_date)
+
+    async def test_should_reject_empty_path_components(self, temp_data_dir: Path) -> None:
+        """Test rejection of empty path components."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 2, 0, 0, 0)
+
+        # Test empty components
+        with pytest.raises(ValidationError, match="Symbol cannot be empty"):
+            await loader.load_data("", "1h", start_date, end_date)
+
+        with pytest.raises(ValidationError, match="Timeframe cannot be empty"):
+            await loader.load_data("BTCUSDT", "", start_date, end_date)
+
+    async def test_should_reject_oversized_path_components(self, temp_data_dir: Path) -> None:
+        """Test rejection of oversized path components."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 2, 0, 0, 0)
+
+        # Test oversized components (>50 characters)
+        long_symbol = "A" * 51
+        with pytest.raises(ValidationError, match="Symbol too long"):
+            await loader.load_data(long_symbol, "1h", start_date, end_date)
+
+    async def test_should_validate_csv_columns_separately(self, temp_data_dir: Path) -> None:
+        """Test CSV column validation as separate method."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Create CSV with missing columns
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+        binance_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = binance_dir / "BTCUSDT_1h_2025-01-01.csv"
+        df = pd.DataFrame(
+            {
+                "timestamp": [1735689600000],
+                "open": [50000],
+                # Missing required columns: high, low, close, volume
+            }
+        )
+        df.to_csv(file_path, index=False)
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        with pytest.raises(DataError, match="missing columns"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+    async def test_should_validate_csv_price_ranges_separately(self, temp_data_dir: Path) -> None:
+        """Test CSV price range validation as separate method."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Create CSV with invalid price ranges
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+        binance_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = binance_dir / "BTCUSDT_1h_2025-01-01.csv"
+        df = pd.DataFrame(
+            {
+                "timestamp": [1735689600000],
+                "open": [-50000],  # Invalid negative price
+                "high": [50100],
+                "low": [49900],
+                "close": [50000],
+                "volume": [100],
+            }
+        )
+        df.to_csv(file_path, index=False)
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        with pytest.raises(DataError, match="non-positive values"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+    async def test_should_validate_csv_ohlc_relationships_separately(
+        self, temp_data_dir: Path
+    ) -> None:
+        """Test CSV OHLC relationship validation as separate method."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Create CSV with invalid OHLC relationships
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+        binance_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = binance_dir / "BTCUSDT_1h_2025-01-01.csv"
+        df = pd.DataFrame(
+            {
+                "timestamp": [1735689600000],
+                "open": [50000],
+                "high": [49000],  # High less than open (invalid)
+                "low": [49900],
+                "close": [50000],
+                "volume": [100],
+            }
+        )
+        df.to_csv(file_path, index=False)
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        with pytest.raises(DataError, match="Invalid OHLC relationships"):
+            await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+    async def test_should_handle_chunked_processing_with_missing_files(
+        self, temp_data_dir: Path
+    ) -> None:
+        """Test chunked processing handles missing files gracefully."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Create binance directory structure
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+        binance_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create only some files to trigger chunked processing with missing files
+        base_date = datetime(2025, 1, 1)
+        created_files = [0, 2, 4, 10, 15, 20, 25, 30, 35, 40]  # Sparse file creation
+
+        for i in created_files:
+            date = base_date + timedelta(days=i)
+            file_path = binance_dir / f"BTCUSDT_1h_{date.strftime('%Y-%m-%d')}.csv"
+
+            df = pd.DataFrame(
+                {
+                    "timestamp": [int((date.timestamp() + h * 3600) * 1000) for h in range(2)],
+                    "open": [50000] * 2,
+                    "high": [50100] * 2,
+                    "low": [49900] * 2,
+                    "close": [50000] * 2,
+                    "volume": [100] * 2,
+                }
+            )
+            df.to_csv(file_path, index=False)
+
+        # Load large date range to trigger chunked processing with missing files
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 2, 15, 23, 59, 59)
+
+        data = await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        # Should still load available data
+        assert len(data) > 0
+        # Data should include rows from created files (some may span date range boundaries)
+        assert len(data) >= len(created_files) * 2  # At least 2 rows per created file

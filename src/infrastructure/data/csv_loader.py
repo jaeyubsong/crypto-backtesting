@@ -6,6 +6,7 @@ with caching, validation, and memory optimization.
 """
 
 import asyncio
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -76,13 +77,20 @@ class CSVDataLoader(IDataLoader):
             ValidationError: If parameters are invalid
             DataError: If data cannot be loaded
         """
-        # Validate inputs
-        self._validate_load_params(symbol, timeframe, start_date, end_date, trading_mode)
+        # Security validation first - sanitize path components
+        safe_trading_mode = self._sanitize_path_component(trading_mode, "trading_mode")
+        safe_symbol = self._sanitize_path_component(symbol, "symbol")
+        safe_timeframe = self._sanitize_path_component(timeframe, "timeframe")
+
+        # Business logic validation
+        self._validate_load_params(
+            safe_symbol, safe_timeframe, start_date, end_date, safe_trading_mode
+        )
 
         try:
             # Generate file paths for date range
             file_paths = self._generate_file_paths(
-                symbol, timeframe, start_date, end_date, trading_mode
+                safe_symbol, safe_timeframe, start_date, end_date, safe_trading_mode
             )
 
             if not file_paths:
@@ -100,6 +108,7 @@ class CSVDataLoader(IDataLoader):
                 combined_df = await self._load_files_chunked(
                     file_paths, start_date, end_date, chunk_size=10
                 )
+                # Chunked processing already logs statistics
             else:
                 # Standard in-memory processing for smaller datasets
                 dataframes = []
@@ -120,11 +129,11 @@ class CSVDataLoader(IDataLoader):
                 combined_df = pd.concat(dataframes, ignore_index=True)
                 combined_df = self._filter_by_date_range(combined_df, start_date, end_date)
 
-            # Log statistics
-            logger.info(
-                f"Loaded {len(combined_df)} rows for {symbol} {timeframe} "
-                f"from {len(dataframes)} files ({len(missing_files)} missing)"
-            )
+                # Log statistics for standard processing
+                logger.info(
+                    f"Loaded {len(combined_df)} rows for {symbol} {timeframe} "
+                    f"from {len(dataframes)} files ({len(missing_files)} missing)"
+                )
 
             return combined_df
 
@@ -169,10 +178,14 @@ class CSVDataLoader(IDataLoader):
         trading_mode: str,
     ) -> list[Path]:
         """Generate list of file paths for the specified date range."""
+        # Assume parameters are already sanitized by caller
         file_paths = []
 
         # Base directory path
         base_dir = self.data_dir / "binance" / trading_mode / symbol / timeframe
+
+        # Validate the constructed path is within data directory
+        self._validate_path_safety(base_dir)
 
         # Generate daily file paths
         current_date = start_date.date()
@@ -185,6 +198,44 @@ class CSVDataLoader(IDataLoader):
             current_date += timedelta(days=1)
 
         return file_paths
+
+    def _sanitize_path_component(self, component: str, component_name: str) -> str:
+        """Sanitize path components to prevent traversal attacks."""
+        if not component:
+            raise ValidationError(f"{component_name.capitalize()} cannot be empty")
+
+        # Remove dangerous characters and sequences
+        if ".." in component or "/" in component or "\\" in component:
+            raise ValidationError(f"Invalid {component_name}: contains path traversal characters")
+
+        # Allow only alphanumeric, underscore, dash, and dot for valid filenames
+        safe_component = re.sub(r"[^a-zA-Z0-9_.-]", "", component)
+
+        if not safe_component or safe_component != component:
+            raise ValidationError(
+                f"Invalid {component_name}: '{component}' contains invalid characters. "
+                f"Only alphanumeric, underscore, dash, and dot are allowed."
+            )
+
+        # Additional length check
+        if len(safe_component) > 50:
+            raise ValidationError(f"{component_name.capitalize()} too long: maximum 50 characters")
+
+        return safe_component
+
+    def _validate_path_safety(self, path: Path) -> None:
+        """Validate that the constructed path is safe and within data directory."""
+        try:
+            # Resolve the path to detect any traversal attempts
+            resolved_path = path.resolve()
+            data_dir_resolved = self.data_dir.resolve()
+
+            # Check if the path is within the data directory
+            if not str(resolved_path).startswith(str(data_dir_resolved)):
+                raise ValidationError("Path traversal attempt detected")
+
+        except (OSError, ValueError) as e:
+            raise ValidationError(f"Invalid path construction: {str(e)}") from e
 
     async def _load_single_file(self, file_path: Path) -> pd.DataFrame:
         """Load a single CSV file with caching."""
@@ -253,7 +304,7 @@ class CSVDataLoader(IDataLoader):
                 chunk_paths, start_date, end_date
             )
 
-            if chunk_data:
+            if chunk_data is not None:
                 all_data.append(chunk_data)
             missing_count += chunk_missing
 
@@ -312,38 +363,54 @@ class CSVDataLoader(IDataLoader):
 
     def _validate_csv_structure(self, df: pd.DataFrame, file_path: Path) -> None:
         """Validate CSV file has expected structure."""
-        expected_columns = ["timestamp", "open", "high", "low", "close", "volume"]
-
         if df.empty:
             return  # Empty files are handled separately
 
+        # Perform comprehensive CSV validation
+        self._validate_csv_columns(df, file_path)
+        self._validate_csv_data_integrity(df, file_path)
+
+    def _validate_csv_columns(self, df: pd.DataFrame, file_path: Path) -> None:
+        """Validate CSV file has required columns."""
+        expected_columns = ["timestamp", "open", "high", "low", "close", "volume"]
         missing_columns = set(expected_columns) - set(df.columns)
         if missing_columns:
             raise DataError(f"CSV file {file_path} missing columns: {missing_columns}")
 
-        # Validate data types and ranges
-        if len(df) > 0:
-            # Check for reasonable price ranges
-            price_columns = ["open", "high", "low", "close"]
-            for col in price_columns:
-                if (df[col] <= 0).any():
-                    raise DataError(
-                        f"Invalid price data in {file_path}: {col} has non-positive values"
-                    )
+    def _validate_csv_data_integrity(self, df: pd.DataFrame, file_path: Path) -> None:
+        """Validate CSV data integrity and value ranges."""
+        if len(df) == 0:
+            return
 
-            # Check volume is non-negative
-            if (df["volume"] < 0).any():
-                raise DataError(f"Invalid volume data in {file_path}: negative volume values")
+        # Validate price ranges
+        self._validate_csv_price_ranges(df, file_path)
 
-            # Check OHLC relationships
-            if (
-                (df["high"] < df["low"])
-                | (df["high"] < df["open"])
-                | (df["high"] < df["close"])
-                | (df["low"] > df["open"])
-                | (df["low"] > df["close"])
-            ).any():
-                raise DataError(f"Invalid OHLC relationships in {file_path}")
+        # Validate volume data
+        if (df["volume"] < 0).any():
+            raise DataError(f"Invalid volume data in {file_path}: negative volume values")
+
+        # Validate OHLC relationships
+        self._validate_csv_ohlc_relationships(df, file_path)
+
+    def _validate_csv_price_ranges(self, df: pd.DataFrame, file_path: Path) -> None:
+        """Validate price columns have positive values."""
+        price_columns = ["open", "high", "low", "close"]
+        for col in price_columns:
+            if (df[col] <= 0).any():
+                raise DataError(f"Invalid price data in {file_path}: {col} has non-positive values")
+
+    def _validate_csv_ohlc_relationships(self, df: pd.DataFrame, file_path: Path) -> None:
+        """Validate OHLC price relationships are logically consistent."""
+        invalid_ohlc = (
+            (df["high"] < df["low"])
+            | (df["high"] < df["open"])
+            | (df["high"] < df["close"])
+            | (df["low"] > df["open"])
+            | (df["low"] > df["close"])
+        )
+
+        if invalid_ohlc.any():
+            raise DataError(f"Invalid OHLC relationships in {file_path}")
 
     def _filter_by_date_range(
         self, df: pd.DataFrame, start_date: datetime, end_date: datetime
