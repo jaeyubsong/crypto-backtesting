@@ -4,1137 +4,287 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a crypto-trading backtesting platform that enables quantitative cryptocurrency traders to develop, test, and analyze algorithmic trading strategies using historical market data. The platform uses Python 3.13+, FastAPI, and follows strict TDD and SOLID principles.
+Crypto-trading backtesting platform for quantitative cryptocurrency traders. Python 3.13+, FastAPI, strict TDD and SOLID principles.
 
 ## 🚨 CRITICAL DEVELOPMENT RULES
 
 ### ⛔ PROTECTED FILES - NEVER MODIFY
-
-The following files are **STRICTLY PROTECTED** and must **NEVER** be modified:
 - `.github/workflows/claude.yml`
 - `.github/workflows/claude-code-review.yml`
 
-These GitHub workflow files are managed externally and contain specific formatting (including trailing whitespace) that must be preserved. The pre-commit hooks are configured to:
-1. **Exclude** these files from whitespace and EOF fixing
-2. **Block** any commits that attempt to modify them
-3. **Display an error** if changes are detected
-
-If you accidentally stage changes to these files:
-```bash
-git reset HEAD .github/workflows/claude.yml .github/workflows/claude-code-review.yml
-```
+These files are managed externally. Pre-commit hooks will block modifications.
 
 ### 1. Test-Driven Development (TDD) - MANDATORY
 
-**ALWAYS follow the TDD cycle for core business logic:**
-1. **RED**: Write a failing test FIRST
-2. **GREEN**: Write minimal code to make the test pass
-3. **REFACTOR**: Improve the code while keeping tests green
-
-**TDD Workflow:**
-```bash
-# 1. Create test file first
-# 2. Write failing test
-# 3. Run test to see it fail: uv run pytest tests/test_specific.py -v
-# 4. Implement minimal code
-# 5. Run test to see it pass
-# 6. Refactor if needed
-# 7. Run all tests: uv run pytest
-```
+**ALWAYS follow TDD cycle:**
+1. **RED**: Write failing test FIRST
+2. **GREEN**: Write minimal code to pass
+3. **REFACTOR**: Improve while keeping tests green
 
 **Testing Philosophy:**
-- Test BEHAVIOR, not implementation details
+- Test BEHAVIOR, not implementation
 - Focus on public APIs and critical business logic
-- Helper functions should be tested through their usage in main functions
-- Don't test trivial getters/setters or simple data classes
-- Integration tests can cover multiple units together
+- Don't test trivial getters/setters
+- Integration tests can cover multiple units
 
-### 2. Commit Frequency
-
-**Commit after EVERY:**
-- Test written (even if failing)
-- Test passing (green phase)
-- Refactoring completed
-- Small feature completed
-- Bug fix implemented
-
-**Commit message format:**
-```
-test: Add test for [feature]
-feat: Implement [feature] to pass test
-refactor: Improve [component] structure
-fix: Resolve [issue] in [component]
-docs: Update [documentation]
-chore: Update dependencies/configuration
-```
-
-## 🚨 CRITICAL: Quality Gates Before Every Commit/Push
-
-**MANDATORY: Run complete CI validation pipeline before EVERY commit and push:**
+### 2. Quality Gates - MANDATORY Before Every Commit
 
 ```bash
-# Complete CI validation pipeline - ALL must pass before committing
+# ALL must pass before committing
 uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80 &&
 uv run ruff check --output-format=github &&
 uv run ruff format --check &&
 uv run mypy src/ tests/
-
-# If all pass, then commit
-git add . && git commit -m "your message"
-
-# Verify CI will pass before pushing
-git push origin your-branch
 ```
 
-**🚫 NEVER push if any of these fail:**
-- Tests failing (even 1 test)
+**🚫 NEVER push if any fail:**
+- Tests failing
 - MyPy type errors
 - Ruff linting errors
 - Coverage below 80%
 
-**Why this matters:**
-- Failed CI wastes team time and blocks other developers
-- Type errors indicate potential runtime bugs
-- Test failures mean broken functionality
-- Poor coverage means insufficient testing
-
-**Quick fix commands:**
+**Quick fixes:**
 ```bash
-# Fix most issues automatically
-uv run ruff check --fix
-uv run ruff format
-
-# Check specific failures
-uv run pytest -x --tb=short  # Stop on first failure
-uv run mypy src/ tests/ | head -20  # Show first 20 type errors
+uv run ruff check --fix && uv run ruff format
+uv run pytest -x --tb=short
 ```
 
-### 3. SOLID Principles
+### 3. SOLID Principles (Essential)
 
-**S - Single Responsibility Principle**
-- Each class/module should have ONE reason to change
-- Split large classes into smaller, focused ones
-- Example: Separate data loading, processing, and storage into different classes
+- **S**: One reason to change per class/module
+- **O**: Open for extension, closed for modification
+- **L**: Derived classes substitutable for base classes
+- **I**: Many specific interfaces > one general interface
+- **D**: Depend on abstractions, not implementations
 
-**O - Open/Closed Principle**
-- Open for extension, closed for modification
-- Use abstract base classes and interfaces
-- Example: `Strategy` base class that can be extended without modifying engine
+### 4. Performance Guidelines
 
-**L - Liskov Substitution Principle**
-- Derived classes must be substitutable for base classes
-- Don't break parent class contracts
-- Example: All Strategy subclasses must work with the BacktestEngine
+**🚀 ACHIEVED: 120-130x faster calculations (Decimal→Float migration)**
+- **Memory**: 4x reduction (24 vs 104 bytes per value)
+- **Coverage**: 83% maintained (+99 tests)
+- **Hot Path Optimization**: Removed redundant validations
+- **Bulk Operations**: O(n) → O(k) improvements
 
-**I - Interface Segregation Principle**
-- Many specific interfaces are better than one general interface
-- Don't force classes to implement methods they don't use
-- Example: Separate interfaces for DataReader, DataWriter, DataProcessor
+**Best Practices:**
+- Avoid redundant conversions: `to_float()` on already-float values
+- Use native operations where safe
+- Cache calculations vs recalculating
+- Strategic validation placement
+- Bulk operations over loops
 
-**D - Dependency Inversion Principle**
-- Depend on abstractions, not concrete implementations
-- Use dependency injection
-- Example: Portfolio should depend on IOrderExecutor interface, not specific implementation
+### 5. File Organization & Size Guidelines
 
-### 4. Performance Optimization Guidelines
-
-**🚀 CRITICAL PERFORMANCE ACHIEVEMENTS (2025-09-16):**
-- **Total Performance**: 120-130x faster calculations (10-100x base + 20-25% optimization)
-- **Hot Path Optimization**: Removed ~50 redundant `to_float()` calls from critical paths
-- **Recent Optimization**: Removed redundant `validate_safe_float_range()` call in liquidation risk checks
-- **Memory Optimization**: Improved portfolio history trimming from O(trim_count) to O(entries_to_keep) bulk operation
-- **Memory Efficiency**: 4x memory reduction maintained (24 vs 104 bytes per value)
-- **Enhanced Error Handling**: Added divide-by-zero validation for position averaging edge cases
-- **Zero Regression**: All 229 tests passing with maintained calculation accuracy
-
-**Latest Performance Improvements (Hot Path Optimization):**
-- **Liquidation Risk Checks**: Faster processing during backtesting by eliminating redundant validation
-- **Portfolio History Management**: Efficient bulk trimming for large datasets using list slicing
-- **Robustness Enhancement**: Protected against edge cases in position management calculations
-
-**Optimization Best Practices:**
-- **Avoid Redundant Conversions**: Don't call `to_float()` on values that are already float
-- **Use Native Operations**: Prefer direct float arithmetic over wrapper functions where safe
-- **Cache Calculations**: Store frequently accessed calculations rather than recalculating
-- **Smart Validation**: Use `validate_safe_float_range()` strategically, avoiding redundant calls in hot paths
-- **Bulk Operations**: Prefer bulk operations over iterative loops for large datasets
-- **Monitor Hot Paths**: Profile code to identify performance bottlenecks
-- **Edge Case Protection**: Add divide-by-zero and boundary validation for robust calculations
-
-**Example Optimizations Applied:**
-```python
-# ❌ BAD: Redundant conversion
-result = to_float(price) * to_float(amount)  # Both already float
-
-# ✅ GOOD: Direct calculation
-result = price * amount  # Native float arithmetic
-
-# ❌ BAD: Redundant validation in hot path
-def is_liquidation_risk(self, price: float):
-    pnl = self.unrealized_pnl(price)  # Already validated internally
-    validate_safe_float_range(pnl, "liquidation check")  # Redundant!
-
-# ✅ GOOD: Strategic validation only where needed
-def is_liquidation_risk(self, price: float):
-    pnl = self.unrealized_pnl(price)  # Already validated
-    # Only validate new calculations
-    position_value = abs(self.size) * self.entry_price
-    validate_safe_float_range(position_value, "position_value in liquidation check")
-
-# ❌ BAD: Inefficient loop-based trimming
-for _ in range(trim_count):
-    self.portfolio_history.popleft()  # O(trim_count)
-
-# ✅ GOOD: Bulk operation for memory management
-recent_entries = list(self.portfolio_history)[-entries_to_keep:]
-self.portfolio_history.clear()
-self.portfolio_history.extend(recent_entries)  # O(entries_to_keep)
-
-# ✅ GOOD: Edge case protection
-if abs(total_size) < MIN_TRADE_SIZE:
-    raise ValidationError("Total size too small for averaging calculation")
-new_entry_price = total_value / total_size  # Safe division
-```
-
-### 5. Scalability Rules
-
-**File Organization:**
 ```
 src/
-├── core/           # Core domain logic (pure Python, no external deps)
-│   ├── models/     # Domain models
-│   ├── interfaces/ # Abstract interfaces
-│   └── exceptions/ # Domain exceptions
-├── infrastructure/ # External dependencies
-│   ├── data/       # Data access layer
-│   ├── cache/      # Caching implementations
-│   └── storage/    # File/DB storage
-├── application/    # Use cases/services
-│   ├── services/   # Business logic services
-│   └── dto/        # Data transfer objects
-└── api/           # API layer
-    ├── routers/    # FastAPI routers
-    └── schemas/    # Pydantic schemas
+├── core/           # Pure business logic, no external deps
+├── infrastructure/ # Data access, caching, storage
+├── application/    # Use cases, services, DTOs
+└── api/           # FastAPI routers, schemas
 ```
 
-**Module Rules:**
-- **File Size Guidelines:**
-  - **Target**: 150-200 lines per class (optimal for readability)
-  - **Standard Maximum**: 300 lines (requires splitting if exceeded)
-  - **Exception Process**: 300-400 lines allowed with documented business rationale
-  - **Hard Limit**: 500 lines (requires architectural review and approval)
-  - **✅ COMPLIANCE ACHIEVED**: portfolio_original.py (545 lines) removed, all files now compliant
-- **Function Guidelines:**
-  - **Maximum function size**: 30 lines (extract if larger)
-  - **Maximum function parameters**: 5 (use data classes if more needed)
-  - **Maximum cyclomatic complexity**: 10 (simplify if higher)
-- **Class Guidelines:**
-  - **Target class size**: 150 lines (single responsibility focus)
-  - **Maximum methods per class**: 15-20 (consider splitting if exceeded)
-  - **Single Responsibility**: Each class should have one reason to change
-
-**When to Split Classes/Files:**
-- Multiple responsibilities (violates Single Responsibility Principle)
-- Difficult to explain class purpose in one sentence
-- Complex test setup requirements across different concerns
-- Method count exceeds 15-20
-- Related methods cluster into distinct business concepts
-- Code review difficulty due to size
-
-**Exception Criteria for Larger Files (300-400 lines):**
-- Tightly coupled business logic that benefits from being together
-- Complex domain calculations that form a cohesive unit
-- State machines or workflow engines with related state transitions
-- Must document rationale and get peer review approval
-- Higher testing standards required (95%+ coverage)
+**Size Limits:**
+- **Target**: 150-200 lines per class
+- **Standard Max**: 300 lines (split if exceeded)
+- **Hard Limit**: 500 lines (architectural review required)
+- **Functions**: ≤30 lines, ≤5 parameters
+- **Classes**: ≤20 methods
 
 **Import Rules:**
-- Core layer: NO external dependencies
-- Infrastructure: Can import from core
-- Application: Can import from core and infrastructure
-- API: Can import from all layers
-- NEVER create circular dependencies
-
-### 5. LLM-Friendly Coding Practices
-
-**Documentation:**
-- EVERY module must have a docstring explaining its purpose
-- EVERY class must have a docstring with responsibility description
-- EVERY public method must have a docstring with parameters and return types
-- Use type hints EVERYWHERE
-
-**Naming Conventions:**
-- Use descriptive names (avoid abbreviations)
-- Classes: PascalCase (e.g., `BacktestEngine`)
-- Functions/variables: snake_case (e.g., `calculate_sharpe_ratio`)
-- Constants: UPPER_SNAKE_CASE (e.g., `DEFAULT_LEVERAGE`)
-- Private methods: prefix with underscore (e.g., `_validate_input`)
-
-**Code Structure:**
-- One class per file (with its related exceptions/types)
-- Group related functionality in modules
-- Use factory patterns for complex object creation
-- Implement builder patterns for objects with many parameters
-
-## 5a. Architectural Patterns Implementation
-
-### Portfolio Architecture - Composition Pattern
-
-**🏗️ REVOLUTIONARY BREAKTHROUGH: Component Decomposition**
-
-The Portfolio class has been transformed using composition pattern, achieving perfect SOLID compliance:
-
-```python
-# ✅ EXEMPLARY: Portfolio Component Architecture
-class Portfolio(IPortfolio):
-    """Main Portfolio using composition pattern with specialized components."""
-
-    def __init__(self, initial_capital: float, trading_mode: TradingMode, max_leverage: float):
-        # Composition: Delegate to specialized components
-        self.core = PortfolioCore(initial_capital, initial_capital, {}, deque(), deque(), trading_mode)
-        self.trading = PortfolioTrading(self.core)
-        self.risk = PortfolioRisk(self.core)
-        self.metrics = PortfolioMetrics(self.core)
-        self.max_leverage = max_leverage
-
-    # Clean delegation to appropriate components
-    def buy(self, symbol: Symbol, amount: float, price: float, leverage: float = 1.0) -> bool:
-        return self.trading.buy(symbol, amount, price, leverage)
-
-    def check_liquidation(self, current_prices: dict[Symbol, float]) -> list[Symbol]:
-        return self.risk.check_liquidation(current_prices)
-```
-
-**Component Responsibilities:**
-- **PortfolioCore (68 lines)**: Thread-safe state management with RLock
-- **PortfolioTrading (82 lines)**: Buy/sell operations with validation
-- **PortfolioRisk (45 lines)**: Liquidation detection and risk management
-- **PortfolioMetrics (47 lines)**: Portfolio value and margin calculations
-- **PortfolioHelpers (81 lines)**: Centralized validation utilities
-
-### Factory Pattern Implementation
-
-**🏭 POSITION FACTORY METHODS**
-
-Implement factory methods for complex object creation with validation:
-
-```python
-# ✅ EXEMPLARY: Factory Pattern with Validation
-class Position:
-    @classmethod
-    def create_long(cls, symbol: Symbol, size: float, entry_price: float,
-                   leverage: float = 1.0, timestamp: datetime | None = None,
-                   trading_mode: TradingMode = TradingMode.SPOT) -> "Position":
-        """Factory method ensuring correct long position configuration."""
-        if timestamp is None:
-            timestamp = datetime.now()
-
-        # Ensure positive size and calculate margin
-        position_size = abs(size)
-        margin_used = cls._calculate_margin_used(position_size, entry_price, leverage, trading_mode)
-
-        return cls(
-            symbol=symbol,
-            size=position_size,
-            entry_price=entry_price,
-            leverage=leverage,
-            timestamp=timestamp,
-            position_type=PositionType.LONG,
-            margin_used=margin_used,
-        )
-
-    @classmethod
-    def create_short(cls, symbol: Symbol, size: float, entry_price: float,
-                    leverage: float = 1.0, timestamp: datetime | None = None,
-                    trading_mode: TradingMode = TradingMode.FUTURES) -> "Position":
-        """Factory method with validation for short positions."""
-        if trading_mode == TradingMode.SPOT:
-            raise ValidationError("Short positions not allowed in SPOT trading mode")
-
-        # Ensure negative size for short positions
-        position_size = -abs(size)
-        margin_used = cls._calculate_margin_used(abs(size), entry_price, leverage, trading_mode)
-
-        return cls(
-            symbol=symbol,
-            size=position_size,
-            entry_price=entry_price,
-            leverage=leverage,
-            timestamp=timestamp,
-            position_type=PositionType.SHORT,
-            margin_used=margin_used,
-        )
-```
-
-### Thread Safety Implementation
-
-**🔒 THREAD-SAFE OPERATIONS**
-
-Use RLock for concurrent access to shared state:
-
-```python
-# ✅ EXEMPLARY: Thread-Safe State Management
-@dataclass
-class PortfolioCore:
-    """Thread-safe portfolio state management."""
-    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
-
-    def add_position(self, position: Position) -> None:
-        """Thread-safe position addition."""
-        with self._lock:  # Atomic operation
-            PortfolioValidator.validate_position_for_add(position, len(self.positions))
-            self.positions[position.symbol] = position
-            self.cash -= position.margin_used
-
-    def record_snapshot(self, timestamp: datetime, current_prices: dict[Symbol, float]) -> None:
-        """Thread-safe state recording."""
-        with self._lock:  # Prevent race conditions
-            snapshot = self._create_snapshot(timestamp, current_prices)
-            self.portfolio_history.append(snapshot)
-```
-
-### Centralized Validation Pattern
-
-**🛡️ VALIDATION HELPERS**
-
-Create centralized validation classes to avoid duplication:
-
-```python
-# ✅ EXEMPLARY: Centralized Validation
-class PortfolioValidator:
-    """Centralized validation for portfolio operations."""
-
-    @staticmethod
-    def validate_position_for_add(position: Position, position_count: int) -> None:
-        """Comprehensive position validation."""
-        if position_count >= MAX_POSITIONS_PER_PORTFOLIO:
-            raise ValidationError(f"Maximum positions limit reached ({MAX_POSITIONS_PER_PORTFOLIO})")
-
-        if not isinstance(position, Position):
-            raise ValidationError("Position must be a valid Position instance")
-
-class OrderValidator:
-    """Centralized order validation."""
-
-    @staticmethod
-    def validate_order(symbol: Symbol, amount: float, price: float, leverage: float) -> tuple[Symbol, float, float, float]:
-        """Validate and return sanitized order parameters."""
-        symbol = validate_symbol(symbol)
-        price = validate_positive(price, "price")
-        amount = validate_positive(amount, "amount")
-        leverage = validate_positive(leverage, "leverage")
-
-        if amount < MIN_TRADE_SIZE or amount > MAX_TRADE_SIZE:
-            raise ValidationError(f"Trade size must be between {MIN_TRADE_SIZE} and {MAX_TRADE_SIZE}")
-
-        return symbol, amount, price, leverage
-```
-
-### Automatic Validation with __post_init__
-
-**⚡ FAIL-FAST VALIDATION**
-
-Use `__post_init__` for immediate validation of dataclasses:
-
-```python
-# ✅ EXEMPLARY: Automatic Validation
-@dataclass
-class BacktestConfig:
-    """Configuration with automatic validation."""
-
-    def __post_init__(self) -> None:
-        """Validate configuration immediately - fail fast."""
-        # Type validation
-        if not isinstance(self.symbol, Symbol):
-            raise TypeError(f"symbol must be Symbol enum, got {type(self.symbol).__name__}")
-
-        # Business logic validation
-        if not self.is_valid_date_range():
-            raise ValueError(f"Invalid date range: start_date must be before end_date")
-
-        if not self.is_valid_leverage():
-            raise ValueError(f"Invalid leverage: {self.max_leverage} for {self.trading_mode}")
-
-@dataclass
-class Position:
-    """Position with automatic validation."""
-
-    def __post_init__(self) -> None:
-        """Validate position data immediately."""
-        if self.entry_price <= 0:
-            raise ValidationError(f"Entry price must be positive, got {self.entry_price}")
-
-        if self.leverage <= 0:
-            raise ValidationError(f"Leverage must be positive, got {self.leverage}")
-```
+- Core: NO external dependencies
+- Infrastructure: Can import core
+- Application: Can import core + infrastructure
+- API: Can import all layers
+- NEVER circular dependencies
 
 ### 6. Testing Standards
+
+**Current Status:** 293 tests, 88% coverage
+- **Core Domain Models**: 90-100% coverage
+- **Portfolio Trading**: 98% coverage (16 tests)
+- **Portfolio Risk**: 100% coverage (16 tests)
 
 **Test Organization:**
 ```
 tests/
-├── unit/                           # Unit tests (isolated, mocked dependencies)
-│   ├── test_backtest.py           # BacktestConfig & BacktestResults models (92% coverage)
-│   ├── test_backtest_config_validation.py # Configuration validation (100% coverage) **NEW**
-│   ├── test_core_types.py         # Protocol compliance & type aliases (87% coverage)
-│   ├── test_enums.py              # All enum classes (94-100% coverage)
-│   ├── test_exceptions.py         # Custom exception hierarchy (100% coverage)
-│   ├── test_portfolio.py          # Core portfolio functionality (84% coverage)
-│   ├── test_portfolio_api.py      # Portfolio Strategy API methods (70% coverage)
-│   ├── test_portfolio_risk.py     # Liquidation & risk management (100% coverage)
-│   ├── test_portfolio_trading.py  # Buy/sell operations (98% coverage)
-│   ├── test_portfolio_validation.py # Input validation (80% coverage)
-│   ├── test_position.py           # Position model (93% coverage)
-│   ├── test_position_factory.py   # Position factory methods (100% coverage) **NEW**
-│   └── test_validation.py         # Validation utilities (100% coverage)
-├── integration/                    # Integration tests (real dependencies) - TBD
-├── e2e/                           # End-to-end tests (full workflow) - TBD
-└── fixtures/                      # Shared test data and utilities
-```
-
-**Implemented Test Suites (Phase 2) - 193 Tests Total:**
-
-**test_portfolio_trading.py** (469 lines, 16 tests, 98% coverage):
-- Buy/sell operations with different leverage levels (1x-100x)
-- Position creation and management for SPOT and FUTURES modes
-- Comprehensive validation of trade execution logic
-- Edge cases: insufficient funds, invalid amounts, extreme leverage
-
-**test_portfolio_risk.py** (540 lines, 16 tests, 100% coverage):
-- Liquidation detection under various market conditions
-- Position closure scenarios (partial and full)
-- Risk management validation across trading modes
-- Margin ratio calculations and safety checks
-
-**test_position_factory.py** (22 tests, 100% coverage) **NEW**:
-- Factory method validation for Position.create_long(), create_short(), create_from_trade()
-- Trading mode compatibility testing (SPOT vs FUTURES)
-- Margin calculation accuracy across different leverage levels
-- Error handling for invalid factory parameters
-
-**test_backtest_config_validation.py** (19 tests, 100% coverage) **NEW**:
-- BacktestConfig.__post_init__ validation with fail-fast behavior
-- Comprehensive type validation for all enum parameters
-- Business logic validation (date ranges, capital, leverage, margin rates)
-- Error message clarity and exception type verification
-
-**test_core_types.py** (297 lines, 9 tests, 87% coverage):
-- Protocol compliance verification for all core interfaces
-- Type alias validation and runtime type checking
-- Integration testing between core components
-- Type safety enforcement across module boundaries
-
-**Test Naming:**
-```python
-def test_should_[expected_behavior]_when_[condition]():
-    # Arrange
-    # Act
-    # Assert
+├── unit/        # Isolated, mocked dependencies
+├── integration/ # Real dependencies
+└── fixtures/    # Shared test data
 ```
 
 **Coverage Guidelines:**
-- Minimum overall coverage: 80% (✅ **ACHIEVED: 83%** - target exceeded)
-- Core business logic: 90%+ (✅ **ACHIEVED: 90-100%** on core modules)
-- API endpoints: 85%+ (⏳ Pending Phase 8 implementation)
-- Helper/utility functions: Covered through usage
-- Data models/DTOs: No direct tests needed
-- Configuration classes: No tests needed
+- Overall: ≥80% (✅ Achieved: 88%)
+- Core business logic: ≥90% (✅ Achieved: 90-100%)
+- Data layer: ≥85% (✅ Achieved: 93-94%)
+- API endpoints: ≥85%
 
-**Current Coverage Status (Post Decimal→Float Migration):**
-- **Overall Coverage**: 83.49% (up from 25% - massive improvement, target exceeded)
-- **Core Domain Models**: 90-100% coverage achieved
-- **Portfolio Trading**: 98% coverage (16 comprehensive tests)
-- **Portfolio Risk Management**: 100% coverage (16 liquidation tests)
-- **Core Types & Protocols**: 87% coverage (9 validation tests)
-- **Precision Infrastructure**: 87% coverage (safe float handling)
-- **Total Test Count**: 229 tests (100% passing, +58 new tests)
+## Architecture Patterns
 
-**What to Test:**
-- Business logic and algorithms
-- Edge cases and error conditions
-- Public API contracts
-- Integration points
-- Complex data transformations
+### Composition Pattern (Portfolio)
+```python
+class Portfolio(IPortfolio):
+    def __init__(self, initial_capital: float, trading_mode: TradingMode, max_leverage: float):
+        self.core = PortfolioCore(...)
+        self.trading = PortfolioTrading(self.core)
+        self.risk = PortfolioRisk(self.core)
+        self.metrics = PortfolioMetrics(self.core)
+```
 
-**What NOT to Test:**
-- Simple getters/setters
-- Configuration classes
-- Third-party library calls (mock them)
-- Framework functionality
-- Trivial type conversions
+### Factory Pattern
+```python
+@classmethod
+def create_long(cls, symbol: Symbol, size: float, entry_price: float, **kwargs) -> "Position":
+    # Validation and construction logic
+    return cls(symbol=symbol, size=abs(size), ...)
+```
 
-### 7. Performance Considerations
+### Thread Safety
+```python
+@dataclass
+class PortfolioCore:
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
-**Data Handling:**
-- Use generators for large datasets
-- Implement pagination for API responses
-- Cache frequently accessed data
-- Use numpy/pandas efficiently (vectorized operations)
-- Batch database operations when possible
+    def add_position(self, position: Position) -> None:
+        with self._lock:
+            # Atomic operations
+```
 
-**Async Patterns:**
-- Use async/await for I/O operations
-- Implement connection pooling
-- Use background tasks for long-running operations
-- Don't block the event loop
+## Precision Guidelines
+
+**Float-Based Calculations (MIGRATION COMPLETED)**
+- ✅ **Use**: Backtesting, strategy development, research
+- 🚫 **Avoid**: Production trading, regulatory reporting
+
+**Safe Operations:**
+```python
+from src.core.types.financial import safe_float_comparison, validate_safe_float_range
+
+# Use tolerance-based comparisons
+if safe_float_comparison(price1, price2, tolerance=1e-9):
+    # Handle equal prices
+
+# Validate extreme values
+safe_value = validate_safe_float_range(calculation, "context")
+```
 
 ## Common Commands
 
-### Development Tools
-- **Lint code**: `uv run ruff check`
-- **Fix linting issues**: `uv run ruff check --fix`
-- **Format code**: `uv run ruff format`
-- **Check code formatting**: `uv run ruff format --check`
-- **Type checking**: `uv run mypy src/ tests/`
-- **Run tests**: `uv run pytest`
-- **Run specific test**: `uv run pytest tests/test_file.py::test_function -v`
-- **Run tests with coverage**: `uv run pytest --cov=src --cov-fail-under=80`
-- **Run tests in watch mode**: `uv run pytest-watch`
-- **Run pre-commit on all files**: `uv run pre-commit run --all-files`
-
-### 🚨 PRE-PUSH CI VALIDATION (MANDATORY)
-
-**CRITICAL**: Always run these commands locally BEFORE pushing to prevent CI failures:
-
+### Development
 ```bash
-# Complete CI validation pipeline (run all commands in sequence)
-uv run ruff check --output-format=github &&
-uv run ruff format --check &&
-uv run mypy src/ tests/ &&
-uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80
+# Testing
+uv run pytest                                    # Run all tests
+uv run pytest --cov=src --cov-fail-under=80    # With coverage
+uv run pytest tests/test_file.py::test_func -v  # Specific test
+
+# Code Quality
+uv run ruff check --fix     # Fix linting
+uv run ruff format          # Format code
+uv run mypy src/ tests/     # Type checking
+
+# Package Management
+uv add <package>            # Add dependency
+uv sync                     # Sync dependencies
 ```
 
-**Individual CI Steps** (for debugging specific failures):
-
-1. **Linting Check** (matches CI exactly):
-   ```bash
-   uv run ruff check --output-format=github
-   ```
-
-2. **Format Check** (matches CI exactly):
-   ```bash
-   uv run ruff format --check
-   ```
-
-3. **Type Checking** (matches CI exactly):
-   ```bash
-   uv run mypy src/ tests/
-   ```
-
-4. **Test Coverage** (matches CI exactly):
-   ```bash
-   uv run pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=80
-   ```
-
-**Quick Fix Commands** (when CI steps fail):
-
-- **Fix linting issues**: `uv run ruff check --fix`
-- **Fix formatting**: `uv run ruff format`
-- **Fix common MyPy issues**: Add type annotations, fix imports
-- **Fix test coverage**: Add missing tests, remove dead code
-
-**CI Failure Debugging:**
-
-- **MyPy fails**: Most common issues are missing imports, type annotations, or precision handling
-- **Coverage fails**: Need ≥80% overall coverage - add tests for uncovered code
-- **Tests fail**: Check for import errors, missing test dependencies, or failing assertions
-- **Ruff fails**: Run `uv run ruff check --fix` and `uv run ruff format` to auto-fix most issues
-
-### Package Management
-- **Add dependencies**: `uv add <package>`
-- **Add dev dependencies**: `uv add --dev <package>`
-- **Sync dependencies**: `uv sync`
-- **Run any command in venv**: `uv run <command>`
-
 ### Project Specific
-- **Start development server**: `uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000`
-- **Run backtest CLI**: `uv run python -m src.backtesting.cli`
+```bash
+# Server
+uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
-### Data Management
-- **Download Binance data**: `uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-03 --convert --timeframes 1m 5m 1h`
-- **Download without conversion**: `uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-01`
-- **Convert existing raw data**: `uv run python scripts/convert_trades_to_ohlcv.py --timeframes 1m 5m 1h`
-- **Convert specific file**: `uv run python scripts/convert_trades_to_ohlcv.py --file BTCUSDT-trades-2025-09-08.csv --timeframes 1m`
+# Data
+uv run python scripts/download_binance_data.py --symbol BTCUSDT --start-date 2025-01-01 --end-date 2025-01-03 --convert --timeframes 1m 5m 1h
+```
 
-## Architecture Guidelines
+## Code Standards
 
-### Layer Responsibilities
+### Naming Conventions
+- Classes: `PascalCase` (`BacktestEngine`)
+- Functions/variables: `snake_case` (`calculate_sharpe_ratio`)
+- Constants: `UPPER_SNAKE_CASE` (`DEFAULT_LEVERAGE`)
+- Private: prefix `_` (`_validate_input`)
 
-**Core Layer (src/core/)**
-- Pure business logic
-- Domain models and entities
-- Business rules and validations
-- No external dependencies
+### Documentation Requirements
+- Every module: purpose docstring
+- Every class: responsibility docstring
+- Every public method: parameters and return types
+- Type hints everywhere
 
-**Infrastructure Layer (src/infrastructure/)**
-- Data access (CSV, database)
-- External service integration
-- Caching mechanisms
-- File system operations
-
-**Application Layer (src/application/)**
-- Use case orchestration
-- Service coordination
-- Transaction management
-- DTO transformations
-
-**API Layer (src/api/)**
-- HTTP request/response handling
-- Input validation
-- Authentication/authorization
-- Error response formatting
-
-### Design Patterns to Use
-
-1. **Repository Pattern**: For data access abstraction
-2. **Factory Pattern**: For strategy creation
-3. **Observer Pattern**: For event-driven updates
-4. **Strategy Pattern**: For trading strategies (already in use)
-5. **Decorator Pattern**: For adding functionality (caching, logging)
-6. **Command Pattern**: For backtest operations
-7. **Builder Pattern**: For complex object construction
-
-## Error Handling Strategy
-
-**Exception Hierarchy:**
+### Error Handling
 ```python
 BacktestException (base)
 ├── ValidationError (invalid input)
-├── DataError (data access issues)
+├── DataError (data access)
 ├── StrategyError (strategy execution)
 ├── CalculationError (metrics/math)
-└── ConfigurationError (setup issues)
+└── ConfigurationError (setup)
 ```
 
-**Error Response Format:**
-- Always return structured error responses
-- Include error code, message, and details
-- Log errors with correlation IDs
-- Never expose internal implementation details
+## Commit Standards
 
-## Code Review Checklist
+**Commit after every:**
+- Test written (even failing)
+- Test passing
+- Refactoring completed
+- Feature completed
 
-Before submitting any code, ensure:
+**Message format:**
+```
+test: Add test for [feature]
+feat: Implement [feature]
+fix: Resolve [issue]
+refactor: Improve [component]
+docs: Update [documentation]
+```
 
-- [x] Tests written FIRST for business logic (TDD) ✅ **ACHIEVED**
-- [x] All tests passing ✅ **ACHIEVED: 229/229 tests (100%)**
-- [x] Code coverage >= 80% overall ✅ **ACHIEVED: 83.49%** (target exceeded)
-- [x] No linting errors ✅ **ACHIEVED: All resolved**
-- [x] SOLID principles followed ✅ **ACHIEVED: Clean architecture maintained**
-- [x] All files follow size guidelines ✅ **ACHIEVED: portfolio_original.py (545 lines) removed**
-- [ ] No functions > 30 lines
-- [ ] No circular dependencies
-- [x] Type hints on all functions ✅ **ACHIEVED: Strict mypy compliance**
-- [x] Docstrings on all public APIs ✅ **ACHIEVED**
-- [x] Committed frequently with clear messages ✅ **ACHIEVED**
+## Performance Targets
 
-**Recent Quality Improvements (Decimal→Float Migration + Hot Path Optimization Complete):**
-- **Performance Revolution**: 120-130x faster calculations (10-100x base + 20-25% optimization)
-- **Hot Path Optimization**: Removed redundant validation calls from critical liquidation checks
-- **Memory Optimization**: 4x memory reduction (24 vs 104 bytes per value) + efficient bulk trimming
-- **Enhanced Robustness**: Added divide-by-zero protection for position averaging calculations
-- **Precision Infrastructure**: Safe float handling with strategic validation placement
-- **Test Coverage Excellence**: From 25% to 83% overall coverage (+99 new tests)
-- **Native Compatibility**: Full NumPy/Pandas integration for data science workflows
-- **Type Safety**: All core modules now have strict type checking
-- **Exception Handling**: Comprehensive 8-level exception hierarchy implemented
-- **Algorithmic Efficiency**: O(trim_count) → O(entries_to_keep) portfolio history management
+- API endpoints: <200ms (p95)
+- Backtest execution: <1s per 1000 candles
+- Data loading: <500ms per file
+- Memory: <1GB for typical backtest
 
-## Performance Guidelines
-
-**Response Time Targets:**
-- API endpoints: < 200ms (p95)
-- Backtest execution: < 1s per 1000 candles
-- Data loading: < 500ms per file
-
-**Memory Usage:**
-- Keep memory footprint under 1GB for typical backtest
-- Use streaming for large datasets
-- Clear unused data promptly
-
-## Security Considerations
+## Security
 
 **Input Validation:**
 - Validate ALL user inputs
-- Use Pydantic for schema validation
+- Use Pydantic for schemas
 - Sanitize file paths
-- Limit file upload sizes
+- Limit upload sizes
 
 **Code Execution:**
 - Sandbox user strategies
-- Restrict imports in strategies
-- Set execution timeouts
-- Monitor resource usage
+- Restrict imports
+- Set timeouts
+- Monitor resources
 
-## Precision and Performance Guidelines
+## Logging (Loguru)
 
-### Float-Based Financial Calculations (MAJOR MIGRATION COMPLETED)
-
-**Migration Decision (January 2025)**: Successfully migrated from `Decimal` to `float` for 120-130x performance improvement in backtesting.
-
-**🎯 MIGRATION ACHIEVEMENTS:**
-- **Performance**: 120-130x faster calculations vs Decimal (total improvement)
-- **Memory**: 4x reduction (24 vs 104 bytes per value)
-- **Coverage**: 83% test coverage maintained (+99 tests added)
-- **Compatibility**: Native NumPy/Pandas integration
-- **Quality**: All 229 tests passing (100% success rate)
-
-**✅ Use Cases (Appropriate for Float)**:
-- Backtesting historical data (primary use case)
-- Strategy development and research
-- Paper trading simulations
-- Performance analysis and metrics calculation
-- Educational and demonstration purposes
-
-**🚫 Restricted Use Cases (Require Decimal)**:
-- Production trading with real money
-- Regulatory reporting and compliance
-- Accounting systems requiring exact precision
-- High-frequency trading production environments
-
-**Precision Infrastructure Available**:
-```python
-from src.core.types.financial import (
-    safe_float_comparison,
-    validate_safe_float_range,
-    round_price,
-    round_amount,
-    round_percentage
-)
-from src.core.constants import FLOAT_COMPARISON_TOLERANCE, MAX_SAFE_FLOAT
-
-# Safe float comparisons (handles precision issues)
-if safe_float_comparison(price1, price2, tolerance=1e-9):
-    # Handle equal prices with appropriate tolerance
-
-# Validate calculations are within safe float range
-safe_value = validate_safe_float_range(large_calculation, "portfolio_total")
-
-# Use consistent rounding for display and storage
-price = round_price(50000.123456)      # 50000.12 (2 decimal places)
-amount = round_amount(1.123456789)     # 1.12345679 (8 decimal places)
-percent = round_percentage(15.12345)   # 15.1235 (4 decimal places)
-
-# Calculate PnL with proper precision handling
-pnl = calculate_pnl(entry_price, exit_price, amount, "LONG")
-```
-
-**Constants for Safe Operations**:
-```python
-FLOAT_COMPARISON_TOLERANCE = 1e-9       # Default tolerance for comparisons
-MAX_SAFE_FLOAT = 9007199254740991      # 2^53 - 1 (safe integer range)
-MIN_SAFE_FLOAT = -9007199254740991     # -(2^53 - 1)
-```
-
-**Monitoring Guidelines**:
-- Monitor cumulative rounding errors in long simulations
-- Use tolerance-based comparisons for assertions in tests
-- Log precision-sensitive operations at DEBUG level
-- Set alerts for values approaching `MAX_SAFE_FLOAT`
-- Validate portfolio consistency using provided validation functions
-
-**Best Practices for Float Precision**:
-1. **Always use safe_float_comparison()** instead of direct equality (`==`)
-2. **Apply consistent rounding** using the provided rounding functions
-3. **Validate extreme values** with validate_safe_float_range()
-4. **Monitor cumulative errors** in long-running backtests
-5. **Test with tolerance** rather than exact equality in assertions
-
-**Performance Monitoring**:
-- Portfolio calculations now 120-130x faster (includes hot path optimizations)
-- Liquidation risk checks optimized for backtesting hot paths
-- Memory usage reduced by 4x for numerical data + efficient bulk operations
-- Portfolio history management optimized from O(n) to O(k) where k << n
-- Native NumPy vectorization support for bulk operations
-- Seamless pandas DataFrame operations
-- Enhanced edge case protection without performance degradation
-
-**Documentation**: See `PRECISION_CONSIDERATIONS.md` and `FUTURE_IMPROVEMENTS.md` for comprehensive precision guidelines, risk assessment, and planned precision monitoring enhancements.
-
-## Deployment Readiness
-
-**Health Checks:**
-- Implement /health endpoint
-- Include dependency checks
-- Monitor critical metrics
-
-**Configuration:**
-- Use environment variables
-- Separate configs per environment
-- Never commit secrets
-
-## Logging Standards
-
-### Logging Setup with Loguru
-
-**Use `loguru` for all logging:**
+**Setup:**
 ```python
 from loguru import logger
-
-# Remove default handler and add custom configuration
 logger.remove()
-logger.add(
-    sys.stderr,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[correlation_id]}</cyan> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level="INFO"
-)
+logger.add(sys.stderr, format="<green>{time}</green> | <level>{level}</level> | {message}", level="INFO")
 ```
 
-### Log Levels
+**Levels:** TRACE < DEBUG < INFO < SUCCESS < WARNING < ERROR < CRITICAL
 
-- **TRACE**: Most detailed diagnostic information
-- **DEBUG**: Detailed diagnostic information (development only)
-- **INFO**: General informational messages (key business events)
-- **SUCCESS**: Successful operation completion
-- **WARNING**: Warning messages (recoverable issues)
-- **ERROR**: Error messages (failures that need attention)
-- **CRITICAL**: Critical failures (system-wide issues)
+**What to Log:**
+- ✅ API requests, business transactions, errors with context
+- ❌ Passwords, PII, secrets, API keys
 
-### Structured Logging with Context
-
-**Bind context data to all logs:**
+**Example:**
 ```python
-# At request start
-logger_with_context = logger.bind(
-    correlation_id=request_id,
-    user_id=user_id,
-    session_id=session_id
-)
-
-# Use throughout request
-logger_with_context.info("Processing backtest",
-    symbol=symbol,
-    timeframe=timeframe
-)
+logger.info("Backtest completed", backtest_id=id, duration=duration, trades=len(trades))
 ```
 
-### What to Log
+## Code Review Checklist
 
-**ALWAYS Log:**
-- API request/response (INFO level)
-- Business transactions start/end
-- External service calls
-- Cache hits/misses
-- Authentication/authorization events
-- Configuration changes
-- Performance metrics exceeding thresholds
-- All errors with full context
-
-**NEVER Log:**
-- Passwords or secrets
-- Personal identifiable information (PII)
-- Full credit card numbers
-- API keys or tokens
-- User strategy code (log hash instead)
-
-### Correlation IDs with Loguru
-
-**Middleware for correlation ID:**
-```python
-from contextvars import ContextVar
-import uuid
-
-correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
-
-@app.middleware("http")
-async def add_correlation_id(request: Request, call_next):
-    correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
-    correlation_id_var.set(correlation_id)
-
-    # Bind to logger for this request
-    with logger.contextualize(correlation_id=correlation_id):
-        response = await call_next(request)
-        response.headers["X-Correlation-ID"] = correlation_id
-        return response
-```
-
-### Performance Logging Decorator
-
-**Auto-log slow operations:**
-```python
-from functools import wraps
-import time
-
-def log_performance(threshold_ms: int = 100):
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            start = time.time()
-            try:
-                result = await func(*args, **kwargs)
-                elapsed_ms = (time.time() - start) * 1000
-
-                if elapsed_ms > threshold_ms:
-                    logger.warning(
-                        f"Slow operation: {func.__name__}",
-                        duration_ms=elapsed_ms,
-                        threshold_ms=threshold_ms
-                    )
-                else:
-                    logger.debug(
-                        f"Operation completed: {func.__name__}",
-                        duration_ms=elapsed_ms
-                    )
-                return result
-            except Exception as e:
-                elapsed_ms = (time.time() - start) * 1000
-                logger.exception(
-                    f"Operation failed: {func.__name__}",
-                    duration_ms=elapsed_ms
-                )
-                raise
-        return wrapper
-    return decorator
-```
-
-### Error Logging with Loguru
-
-**Automatic exception capture:**
-```python
-@logger.catch(message="Failed to process backtest")
-async def process_backtest(strategy: Strategy) -> Results:
-    # Exceptions automatically logged with full traceback
-    pass
-
-# Manual error logging with context
-try:
-    result = await process_trade(trade)
-except Exception as e:
-    logger.exception(
-        "Trade processing failed",
-        trade_id=trade.id,
-        symbol=trade.symbol,
-        quantity=trade.quantity,
-        side=trade.side
-    )
-    raise
-```
-
-### Log File Rotation
-
-**Configure automatic rotation:**
-```python
-# Rotate log file when it reaches 10MB
-logger.add(
-    "logs/app_{time}.log",
-    rotation="10 MB",
-    retention="30 days",
-    compression="zip",
-    format="{time} | {level} | {extra[correlation_id]} | {message}",
-    serialize=True  # JSON format for log aggregation
-)
-
-# Separate error log
-logger.add(
-    "logs/errors_{time}.log",
-    level="ERROR",
-    rotation="10 MB",
-    retention="90 days",
-    compression="zip"
-)
-
-# Audit log (never delete)
-audit_logger = logger.bind(type="audit")
-audit_logger.add(
-    "logs/audit_{time}.log",
-    filter=lambda record: record["extra"].get("type") == "audit",
-    retention="7 years",
-    serialize=True
-)
-```
-
-### Environment-Specific Configuration
-
-```python
-import os
-from loguru import logger
-
-def configure_logging():
-    logger.remove()  # Remove default handler
-
-    env = os.getenv("ENVIRONMENT", "development")
-
-    if env == "development":
-        # Colorful console output for development
-        logger.add(
-            sys.stderr,
-            format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-            level="DEBUG"
-        )
-    elif env == "production":
-        # JSON logs for production
-        logger.add(
-            sys.stdout,
-            format="{message}",
-            level="INFO",
-            serialize=True
-        )
-        # Also write to file
-        logger.add(
-            "logs/app.log",
-            rotation="100 MB",
-            retention="30 days",
-            compression="zip",
-            serialize=True
-        )
-```
-
-### Testing with Loguru
-
-**Capture logs in tests:**
-```python
-import pytest
-from loguru import logger
-
-@pytest.fixture
-def caplog(caplog):
-    """Make pytest caplog work with loguru"""
-    handler_id = logger.add(caplog.handler, format="{message}")
-    yield caplog
-    logger.remove(handler_id)
-
-def test_something_logs_correctly(caplog):
-    my_function()
-    assert "Expected message" in caplog.text
-    assert caplog.records[0].levelname == "INFO"
-```
-
-### Log Message Best Practices
-
-```python
-# Good: Structured, searchable, with context
-logger.info("Backtest completed successfully",
-    backtest_id=backtest_id,
-    duration_seconds=duration,
-    total_trades=len(trades),
-    final_portfolio_value=portfolio.value
-)
-
-# Bad: Unstructured string concatenation
-logger.info(f"Backtest {backtest_id} done in {duration}s with {len(trades)} trades")
-
-# Good: Use success level for positive outcomes
-logger.success("Strategy validation passed", strategy_hash=strategy_hash)
-
-# Good: Include enough context to debug without looking at code
-logger.error("Order execution failed",
-    order_type=order.type,
-    symbol=order.symbol,
-    quantity=order.quantity,
-    reason=str(e),
-    available_balance=portfolio.cash,
-    required_margin=required_margin
-)
-```
-
-## Suggested Additional Rules
-
-Would you like me to add any of these?
-
-1. **API Versioning**: Start with /api/v1/ prefix
-2. **Feature Flags**: For gradual feature rollout
-3. **Rate Limiting**: API request limits
-4. **Caching Strategy**: TTL and invalidation rules
-5. **Database Migration**: Alembic setup when needed
-6. **Monitoring**: OpenTelemetry instrumentation
-7. **CI/CD Pipeline**: GitHub Actions configuration
+- [x] TDD followed (test first)
+- [x] All tests passing (293/293)
+- [x] Coverage ≥80% (88% achieved)
+- [x] No linting/type errors
+- [x] SOLID principles followed
+- [x] File size guidelines met
+- [ ] Functions ≤30 lines
+- [ ] No circular dependencies
+- [x] Type hints everywhere
+- [x] Documentation complete
