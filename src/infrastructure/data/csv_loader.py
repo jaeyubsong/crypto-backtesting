@@ -9,6 +9,7 @@ import asyncio
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from threading import RLock
 
 import pandas as pd
 from cachetools import LRUCache
@@ -41,6 +42,7 @@ class CSVDataLoader(IDataLoader):
         """
         self.data_dir = Path(data_directory)
         self.cache: LRUCache = LRUCache(maxsize=cache_size)
+        self._cache_lock = RLock()  # Thread-safe cache access
         self._validate_data_directory()
 
     def _validate_data_directory(self) -> None:
@@ -140,7 +142,9 @@ class CSVDataLoader(IDataLoader):
         except Exception as e:
             if isinstance(e, DataError | ValidationError):
                 raise
-            raise DataError(f"Failed to load data for {symbol} {timeframe}: {str(e)}") from e
+            # Sanitize error message to prevent information disclosure
+            logger.error(f"Data loading failed for {symbol} {timeframe}", exc_info=True)
+            raise DataError(f"Failed to load data for {symbol} {timeframe}") from e
 
     def _validate_load_params(
         self,
@@ -247,10 +251,11 @@ class CSVDataLoader(IDataLoader):
             # File doesn't exist, will raise error below
             cache_key = str(file_path)
 
-        # Check cache first
-        if cache_key in self.cache:
-            logger.debug(f"Cache hit for {file_path}")
-            return self.cache[cache_key].copy()
+        # Check cache first (thread-safe)
+        with self._cache_lock:
+            if cache_key in self.cache:
+                logger.debug(f"Cache hit for {file_path}")
+                return self.cache[cache_key].copy()
 
         # Load from disk
         logger.debug(f"Loading file: {file_path}")
@@ -279,8 +284,9 @@ class CSVDataLoader(IDataLoader):
             # Basic validation
             self._validate_csv_structure(df, file_path)
 
-            # Cache the result (without datetime column for consistency)
-            self.cache[cache_key] = df.copy()
+            # Cache the result (thread-safe)
+            with self._cache_lock:
+                self.cache[cache_key] = df.copy()
 
             return df
 
@@ -288,7 +294,9 @@ class CSVDataLoader(IDataLoader):
             logger.warning(f"Empty data file: {file_path}")
             return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
         except Exception as e:
-            raise DataError(f"Failed to load CSV file {file_path}: {str(e)}") from e
+            # Sanitize error message to prevent path disclosure
+            logger.error(f"CSV file loading failed: {file_path.name}", exc_info=True)
+            raise DataError(f"Failed to load CSV file: {file_path.name}") from e
 
     async def _load_files_chunked(
         self, file_paths: list[Path], start_date: datetime, end_date: datetime, chunk_size: int = 10
@@ -459,15 +467,37 @@ class CSVDataLoader(IDataLoader):
         return sorted(timeframes)
 
     def clear_cache(self) -> None:
-        """Clear the data cache."""
-        self.cache.clear()
+        """Clear the data cache (thread-safe)."""
+        with self._cache_lock:
+            self.cache.clear()
         logger.info("Data cache cleared")
 
     def get_cache_info(self) -> dict[str, int]:
-        """Get cache statistics."""
-        return {
-            "cache_size": len(self.cache),
-            "max_size": int(self.cache.maxsize) if self.cache.maxsize else 0,
-            "hits": getattr(self.cache, "hits", 0),
-            "misses": getattr(self.cache, "misses", 0),
-        }
+        """Get cache statistics (thread-safe)."""
+        with self._cache_lock:
+            return {
+                "cache_size": len(self.cache),
+                "max_size": int(self.cache.maxsize) if self.cache.maxsize else 0,
+                "hits": getattr(self.cache, "hits", 0),
+                "misses": getattr(self.cache, "misses", 0),
+            }
+
+    async def close(self) -> None:
+        """Clean up resources and close the data loader."""
+        logger.info("Closing CSV data loader")
+
+        # Clear cache to free memory
+        self.clear_cache()
+
+        # Log cleanup completion
+        logger.info("CSV data loader closed successfully")
+
+    async def __aenter__(self) -> "CSVDataLoader":
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object
+    ) -> None:
+        """Async context manager exit with cleanup."""
+        await self.close()

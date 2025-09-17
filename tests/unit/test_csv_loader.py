@@ -241,7 +241,7 @@ class TestCSVDataLoader:
         start_date = datetime(2025, 1, 10)
         end_date = datetime(2025, 1, 10)
 
-        with pytest.raises(DataError, match="missing columns"):
+        with pytest.raises(DataError, match="Failed to load CSV file"):
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     @pytest.mark.asyncio
@@ -269,7 +269,7 @@ class TestCSVDataLoader:
         start_date = datetime(2025, 1, 11)
         end_date = datetime(2025, 1, 11)
 
-        with pytest.raises(DataError, match="Invalid OHLC relationships"):
+        with pytest.raises(DataError, match="Failed to load CSV file"):
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     @pytest.mark.asyncio
@@ -502,7 +502,7 @@ class TestCSVDataLoader:
         start_date = datetime(2025, 1, 1, 0, 0, 0)
         end_date = datetime(2025, 1, 1, 23, 59, 59)
 
-        with pytest.raises(DataError, match="missing columns"):
+        with pytest.raises(DataError, match="Failed to load CSV file"):
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     async def test_should_validate_csv_price_ranges_separately(self, temp_data_dir: Path) -> None:
@@ -529,7 +529,7 @@ class TestCSVDataLoader:
         start_date = datetime(2025, 1, 1, 0, 0, 0)
         end_date = datetime(2025, 1, 1, 23, 59, 59)
 
-        with pytest.raises(DataError, match="non-positive values"):
+        with pytest.raises(DataError, match="Failed to load CSV file"):
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     async def test_should_validate_csv_ohlc_relationships_separately(
@@ -558,7 +558,7 @@ class TestCSVDataLoader:
         start_date = datetime(2025, 1, 1, 0, 0, 0)
         end_date = datetime(2025, 1, 1, 23, 59, 59)
 
-        with pytest.raises(DataError, match="Invalid OHLC relationships"):
+        with pytest.raises(DataError, match="Failed to load CSV file"):
             await loader.load_data("BTCUSDT", "1h", start_date, end_date)
 
     async def test_should_handle_chunked_processing_with_missing_files(
@@ -601,3 +601,95 @@ class TestCSVDataLoader:
         assert len(data) > 0
         # Data should include rows from created files (some may span date range boundaries)
         assert len(data) >= len(created_files) * 2  # At least 2 rows per created file
+
+    async def test_should_be_thread_safe_for_concurrent_cache_access(
+        self, temp_data_dir: Path
+    ) -> None:
+        """Test thread safety of cache operations."""
+        import asyncio
+
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Create test data
+        binance_dir = temp_data_dir / "binance" / "futures" / "BTCUSDT" / "1h"
+        binance_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = binance_dir / "BTCUSDT_1h_2025-01-01.csv"
+        df = pd.DataFrame(
+            {
+                "timestamp": [1735689600000],
+                "open": [50000],
+                "high": [50100],
+                "low": [49900],
+                "close": [50000],
+                "volume": [100],
+            }
+        )
+        df.to_csv(file_path, index=False)
+
+        # Test concurrent access
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        async def load_data_task() -> pd.DataFrame:
+            return await loader.load_data("BTCUSDT", "1h", start_date, end_date)
+
+        # Run multiple concurrent operations
+        tasks = [load_data_task() for _ in range(10)]
+        results = await asyncio.gather(*tasks)
+
+        # All should succeed and return same data
+        assert all(len(result) == 1 for result in results)
+        assert all(result.iloc[0]["open"] == 50000 for result in results)
+
+    async def test_should_support_async_context_manager(self, temp_data_dir: Path) -> None:
+        """Test async context manager functionality."""
+        # Test context manager usage
+        async with CSVDataLoader(str(temp_data_dir)) as loader:
+            # Should be able to use loader normally
+            symbols = loader.get_available_symbols()
+            assert isinstance(symbols, list)
+
+        # Context manager should handle cleanup automatically
+
+    async def test_should_cleanup_resources_on_close(self, temp_data_dir: Path) -> None:
+        """Test resource cleanup functionality."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        # Add something to cache first
+        cache_info_before = loader.get_cache_info()
+        assert cache_info_before["cache_size"] == 0
+
+        # Manually add to cache for testing
+        with loader._cache_lock:
+            loader.cache["test_key"] = pd.DataFrame({"test": [1, 2, 3]})
+
+        # Verify cache has data
+        cache_info_after = loader.get_cache_info()
+        assert cache_info_after["cache_size"] == 1
+
+        # Close should clear cache
+        await loader.close()
+
+        # Verify cache is cleared
+        cache_info_final = loader.get_cache_info()
+        assert cache_info_final["cache_size"] == 0
+
+    async def test_should_sanitize_error_messages(self, temp_data_dir: Path) -> None:
+        """Test that error messages don't expose sensitive information."""
+        loader = CSVDataLoader(str(temp_data_dir))
+
+        start_date = datetime(2025, 1, 1, 0, 0, 0)
+        end_date = datetime(2025, 1, 1, 23, 59, 59)
+
+        # Try to load non-existent data
+        with pytest.raises(DataError) as exc_info:
+            await loader.load_data("NONEXISTENT", "1h", start_date, end_date)
+
+        error_message = str(exc_info.value)
+        # Error message should not contain full file paths or sensitive details
+        assert "Users" not in error_message  # No user directory paths
+        assert "Library" not in error_message  # No system paths
+        assert "Mobile Documents" not in error_message  # No iCloud paths
+        # Should only contain sanitized information
+        assert "NONEXISTENT" in error_message or "Failed to load data" in error_message
