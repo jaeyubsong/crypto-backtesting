@@ -249,31 +249,50 @@ class CSVDataLoader(IDataLoader):
         # Process files in chunks
         for i in range(0, len(file_paths), chunk_size):
             chunk_paths = file_paths[i : i + chunk_size]
-            chunk_dataframes = []
-
-            # Load chunk of files
-            for file_path in chunk_paths:
-                try:
-                    df = await self._load_single_file(file_path)
-                    if not df.empty:
-                        # Filter data immediately to reduce memory usage
-                        df = self._filter_by_date_range(df, start_date, end_date)
-                        if not df.empty:
-                            chunk_dataframes.append(df)
-                except FileNotFoundError:
-                    missing_count += 1
-                    logger.warning(f"Missing data file: {file_path}")
-
-            # Concatenate chunk and append to results
-            if chunk_dataframes:
-                chunk_df = pd.concat(chunk_dataframes, ignore_index=True)
-                all_data.append(chunk_df)
-
-            # Log chunk progress
-            logger.debug(
-                f"Processed chunk {i // chunk_size + 1}/{(len(file_paths) + chunk_size - 1) // chunk_size}"
+            chunk_data, chunk_missing = await self._process_chunk_files(
+                chunk_paths, start_date, end_date
             )
 
+            if chunk_data:
+                all_data.append(chunk_data)
+            missing_count += chunk_missing
+
+            # Log chunk progress
+            total_chunks = (len(file_paths) + chunk_size - 1) // chunk_size
+            logger.debug(f"Processed chunk {i // chunk_size + 1}/{total_chunks}")
+
+        return self._finalize_chunked_data(all_data, file_paths, missing_count)
+
+    async def _process_chunk_files(
+        self, chunk_paths: list[Path], start_date: datetime, end_date: datetime
+    ) -> tuple[pd.DataFrame | None, int]:
+        """Process files in a single chunk and return concatenated data."""
+        chunk_dataframes = []
+        missing_count = 0
+
+        for file_path in chunk_paths:
+            try:
+                df = await self._load_single_file(file_path)
+                if not df.empty:
+                    # Filter data immediately to reduce memory usage
+                    df = self._filter_by_date_range(df, start_date, end_date)
+                    if not df.empty:
+                        chunk_dataframes.append(df)
+            except FileNotFoundError:
+                missing_count += 1
+                logger.warning(f"Missing data file: {file_path}")
+
+        # Concatenate chunk files if any data found
+        chunk_data = None
+        if chunk_dataframes:
+            chunk_data = pd.concat(chunk_dataframes, ignore_index=True)
+
+        return chunk_data, missing_count
+
+    def _finalize_chunked_data(
+        self, all_data: list[pd.DataFrame], file_paths: list[Path], missing_count: int
+    ) -> pd.DataFrame:
+        """Finalize chunked data processing with concatenation and cleanup."""
         if not all_data:
             raise DataError("No valid data found in any chunks")
 

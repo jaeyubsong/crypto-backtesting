@@ -217,54 +217,69 @@ class OHLCVDataProcessor(IDataProcessor):
             return data
 
         # Validate target timeframe
+        self._validate_target_timeframe(target_timeframe)
+
+        try:
+            # Prepare data for resampling
+            df_prepared = self._prepare_resampling_data(data)
+
+            # Perform resampling
+            resampled = self._perform_resampling(df_prepared, target_timeframe)
+
+            # Finalize and validate result
+            result = self._finalize_resampled_data(resampled)
+
+            logger.info(f"Resampled data: {len(data)} -> {len(result)} rows to {target_timeframe}")
+            return result
+
+        except Exception as e:
+            raise DataError(f"Failed to resample data to {target_timeframe}: {str(e)}") from e
+
+    def _validate_target_timeframe(self, target_timeframe: str) -> None:
+        """Validate the target timeframe for resampling."""
         try:
             Timeframe.from_string(target_timeframe)
         except ValueError as e:
             raise ValidationError(str(e)) from e
 
-        try:
-            # Convert timestamp to datetime index
-            df_resampled = data.copy()
-            df_resampled["datetime"] = pd.to_datetime(
-                df_resampled["timestamp"], unit="ms", utc=True
+    def _prepare_resampling_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Prepare data for resampling by converting to datetime index."""
+        df_prepared = data.copy()
+        df_prepared["datetime"] = pd.to_datetime(df_prepared["timestamp"], unit="ms", utc=True)
+        return df_prepared.set_index("datetime")
+
+    def _perform_resampling(self, df_indexed: pd.DataFrame, target_timeframe: str) -> pd.DataFrame:
+        """Perform the actual OHLCV resampling."""
+        freq = self._get_pandas_freq(target_timeframe)
+
+        return (
+            df_indexed.resample(freq)
+            .agg(
+                {
+                    "timestamp": "first",  # Take first timestamp in period
+                    "open": "first",  # First price in period
+                    "high": "max",  # Maximum price in period
+                    "low": "min",  # Minimum price in period
+                    "close": "last",  # Last price in period
+                    "volume": "sum",  # Total volume in period
+                }
             )
-            df_resampled = df_resampled.set_index("datetime")
+            .dropna()
+        )
 
-            # Define resampling rule
-            freq = self._get_pandas_freq(target_timeframe)
+    def _finalize_resampled_data(self, resampled: pd.DataFrame) -> pd.DataFrame:
+        """Finalize resampled data with proper formatting and validation."""
+        # Reset index and ensure proper column order
+        result = resampled.reset_index(drop=True)
+        result = result[["timestamp", "open", "high", "low", "close", "volume"]]
 
-            # Resample OHLCV data
-            resampled = (
-                df_resampled.resample(freq)
-                .agg(
-                    {
-                        "timestamp": "first",  # Take first timestamp in period
-                        "open": "first",  # First price in period
-                        "high": "max",  # Maximum price in period
-                        "low": "min",  # Minimum price in period
-                        "close": "last",  # Last price in period
-                        "volume": "sum",  # Total volume in period
-                    }
-                )
-                .dropna()
-            )
+        # Convert timestamp back to milliseconds
+        result["timestamp"] = result["timestamp"].astype("int64")
 
-            # Reset index and ensure proper column order
-            result = resampled.reset_index(drop=True)
-            result = result[["timestamp", "open", "high", "low", "close", "volume"]]
+        # Validate resampled data
+        self.validate_data(result)
 
-            # Convert timestamp back to milliseconds
-            result["timestamp"] = result["timestamp"].astype("int64")
-
-            # Validate resampled data
-            self.validate_data(result)
-
-            logger.info(f"Resampled data: {len(data)} -> {len(result)} rows to {target_timeframe}")
-
-            return result
-
-        except Exception as e:
-            raise DataError(f"Failed to resample data to {target_timeframe}: {str(e)}") from e
+        return result
 
     def _get_pandas_freq(self, timeframe: str) -> str:
         """Convert trading timeframe to pandas frequency string."""
