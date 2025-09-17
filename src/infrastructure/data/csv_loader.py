@@ -271,7 +271,7 @@ class CSVDataLoader(IDataLoader):
 
             # Log chunk progress
             logger.debug(
-                f"Processed chunk {i//chunk_size + 1}/{(len(file_paths) + chunk_size - 1)//chunk_size}"
+                f"Processed chunk {i // chunk_size + 1}/{(len(file_paths) + chunk_size - 1) // chunk_size}"
             )
 
         if not all_data:
