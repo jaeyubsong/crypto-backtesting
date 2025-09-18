@@ -112,8 +112,11 @@ class CSVValidator:
         CSVValidator._validate_csv_price_ranges(df, file_path)
 
         # Validate volume data
-        if (df["volume"] < 0).any():
-            raise DataError(f"Invalid volume data in {file_path}: negative volume values")
+        try:
+            if (df["volume"] < 0).any():
+                raise DataError(f"Invalid volume data in {file_path}: negative volume values")
+        except (TypeError, ValueError) as e:
+            raise DataError(f"Invalid volume data in {file_path}: invalid data type") from e
 
         # Validate OHLC relationships
         CSVValidator._validate_csv_ohlc_relationships(df, file_path)
@@ -123,19 +126,29 @@ class CSVValidator:
         """Validate price columns have positive values."""
         price_columns = ["open", "high", "low", "close"]
         for col in price_columns:
-            if (df[col] <= 0).any():
-                raise DataError(f"Invalid price data in {file_path}: {col} has non-positive values")
+            try:
+                if (df[col] <= 0).any():
+                    raise DataError(
+                        f"Invalid price data in {file_path}: {col} has non-positive values"
+                    )
+            except (TypeError, ValueError) as e:
+                raise DataError(
+                    f"Invalid price data in {file_path}: {col} has invalid data type"
+                ) from e
 
     @staticmethod
     def _validate_csv_ohlc_relationships(df: pd.DataFrame, file_path: Path) -> None:
         """Validate OHLC price relationships are logically consistent."""
-        invalid_ohlc = (
-            (df["high"] < df["low"])
-            | (df["high"] < df["open"])
-            | (df["high"] < df["close"])
-            | (df["low"] > df["open"])
-            | (df["low"] > df["close"])
-        )
+        try:
+            invalid_ohlc = (
+                (df["high"] < df["low"])
+                | (df["high"] < df["open"])
+                | (df["high"] < df["close"])
+                | (df["low"] > df["open"])
+                | (df["low"] > df["close"])
+            )
 
-        if invalid_ohlc.any():
-            raise DataError(f"Invalid OHLC relationships in {file_path}")
+            if invalid_ohlc.any():
+                raise DataError(f"Invalid OHLC relationships in {file_path}")
+        except (TypeError, ValueError) as e:
+            raise DataError(f"Invalid OHLC data in {file_path}: invalid data types") from e

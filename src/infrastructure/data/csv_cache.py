@@ -44,6 +44,10 @@ class CSVCache(CacheSubject, ICacheManager):
         self._cache_lock = RLock()  # Thread-safe cache access
         self._memory_usage_mb = 0.0  # Track approximate memory usage
 
+        # Track cache statistics
+        self._cache_hits = 0
+        self._cache_misses = 0
+
         # Set up default observers if enabled
         if enable_observers:
             for observer in create_standard_cache_observers():
@@ -87,6 +91,7 @@ class CSVCache(CacheSubject, ICacheManager):
         """Check cache for existing entry and return if found."""
         with self._cache_lock:
             if cache_key in self.cache:
+                self._cache_hits += 1
                 logger.debug(f"Cache hit for {file_path}")
                 # Notify observers of cache hit
                 self.notify_observers(
@@ -98,6 +103,7 @@ class CSVCache(CacheSubject, ICacheManager):
                 )
                 return self.cache[cache_key].copy()
             else:
+                self._cache_misses += 1
                 # Notify observers of cache miss
                 self.notify_observers(
                     CacheEvent(
@@ -199,9 +205,11 @@ class CSVCache(CacheSubject, ICacheManager):
         """Retrieve data from cache (ICacheManager interface)."""
         with self._cache_lock:
             if key in self.cache:
+                self._cache_hits += 1
                 self.notify_observers(CacheEvent(CacheEventType.CACHE_HIT, key))
                 return self.cache[key].copy()
             else:
+                self._cache_misses += 1
                 self.notify_observers(CacheEvent(CacheEventType.CACHE_MISS, key))
                 return None
 
@@ -242,6 +250,36 @@ class CSVCache(CacheSubject, ICacheManager):
         """Get cache statistics (ICacheManager interface)."""
         return self.get_cache_info()
 
+    def recalculate_memory_usage(self) -> float:
+        """Recalculate actual memory usage from cached DataFrames (thread-safe)."""
+        with self._cache_lock:
+            total_memory_mb = 0.0
+            for df in self.cache.values():
+                total_memory_mb += df.memory_usage(deep=True).sum() / (1024 * 1024)
+
+            old_memory = self._memory_usage_mb
+            self._memory_usage_mb = total_memory_mb
+
+            # Notify observers if memory usage changed significantly (>5% difference)
+            if abs(old_memory - total_memory_mb) > (old_memory * 0.05):
+                self.notify_observers(
+                    CacheEvent(
+                        CacheEventType.MEMORY_WARNING,
+                        "memory_recalculation",
+                        metadata={
+                            "old_memory_mb": old_memory,
+                            "new_memory_mb": total_memory_mb,
+                            "drift_mb": total_memory_mb - old_memory,
+                        },
+                    )
+                )
+                logger.info(
+                    f"Memory usage recalculated: {old_memory:.1f}MB → {total_memory_mb:.1f}MB "
+                    f"(drift: {total_memory_mb - old_memory:+.1f}MB)"
+                )
+
+            return total_memory_mb
+
     def get_cache_info(self) -> dict[str, int | float]:
         """Get cache statistics (thread-safe)."""
         with self._cache_lock:
@@ -253,7 +291,6 @@ class CSVCache(CacheSubject, ICacheManager):
                 "memory_usage_percent": round(
                     (self._memory_usage_mb / self.MAX_MEMORY_MB) * 100, 1
                 ),
-                # Note: LRUCache doesn't have built-in hit/miss statistics
-                "hits": 0,  # Would need custom implementation for accurate tracking
-                "misses": 0,
+                "hits": self._cache_hits,
+                "misses": self._cache_misses,
             }
