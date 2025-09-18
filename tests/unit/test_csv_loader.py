@@ -94,7 +94,7 @@ class TestCSVDataLoader:
         """Test loader initializes with valid data directory."""
         loader = CSVDataLoader(data_directory=str(temp_data_dir))
         assert loader.data_dir == temp_data_dir
-        assert loader.cache.maxsize == 100  # default cache size
+        assert loader.cache_manager.cache.maxsize == 100  # default cache size
 
     def test_should_raise_error_for_invalid_directory(self) -> None:
         """Test loader raises error for non-existent directory."""
@@ -305,7 +305,7 @@ class TestCSVDataLoader:
     def test_should_clear_cache(self, loader: CSVDataLoader) -> None:
         """Test cache clearing."""
         # Add something to cache first
-        loader.cache["test"] = "value"
+        loader.cache_manager.cache["test"] = "value"
         assert loader.get_cache_info()["cache_size"] == 1
 
         loader.clear_cache()
@@ -661,8 +661,8 @@ class TestCSVDataLoader:
         assert cache_info_before["cache_size"] == 0
 
         # Manually add to cache for testing
-        with loader._cache_lock:
-            loader.cache["test_key"] = pd.DataFrame({"test": [1, 2, 3]})
+        with loader.cache_manager._cache_lock:
+            loader.cache_manager.cache["test_key"] = pd.DataFrame({"test": [1, 2, 3]})
 
         # Verify cache has data
         cache_info_after = loader.get_cache_info()

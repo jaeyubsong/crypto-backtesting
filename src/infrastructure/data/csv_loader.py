@@ -5,19 +5,18 @@ This module provides efficient loading of historical OHLCV data from daily CSV f
 with caching, validation, and memory optimization.
 """
 
-import asyncio
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import RLock
 
 import pandas as pd
-from cachetools import LRUCache
 from loguru import logger
 
-from src.core.enums.timeframes import Timeframe
 from src.core.exceptions.backtest import DataError, ValidationError
 from src.core.interfaces.data import IDataLoader
+
+from .csv_cache import CSVCache
+from .csv_utils import CSVUtils
+from .csv_validator import CSVValidator
 
 
 class CSVDataLoader(IDataLoader):
@@ -41,18 +40,8 @@ class CSVDataLoader(IDataLoader):
             cache_size: Maximum number of cached DataFrames
         """
         self.data_dir = Path(data_directory)
-        self.cache: LRUCache = LRUCache(maxsize=cache_size)
-        self._cache_lock = RLock()  # Thread-safe cache access
-        self._validate_data_directory()
-
-    def _validate_data_directory(self) -> None:
-        """Validate that the data directory exists and has expected structure."""
-        if not self.data_dir.exists():
-            raise DataError(f"Data directory not found: {self.data_dir}")
-
-        binance_dir = self.data_dir / "binance"
-        if not binance_dir.exists():
-            raise DataError(f"Binance data directory not found: {binance_dir}")
+        self.cache_manager = CSVCache(cache_size)
+        CSVUtils.validate_data_directory(self.data_dir)
 
     async def load_data(
         self,
@@ -79,99 +68,123 @@ class CSVDataLoader(IDataLoader):
             ValidationError: If parameters are invalid
             DataError: If data cannot be loaded
         """
-        # Security validation first - sanitize path components
-        safe_trading_mode = self._sanitize_path_component(trading_mode, "trading_mode")
-        safe_symbol = self._sanitize_path_component(symbol, "symbol")
-        safe_timeframe = self._sanitize_path_component(timeframe, "timeframe")
-
-        # Business logic validation
-        self._validate_load_params(
-            safe_symbol, safe_timeframe, start_date, end_date, safe_trading_mode
-        )
-
         try:
-            # Generate file paths for date range
-            file_paths = self._generate_file_paths(
-                safe_symbol, safe_timeframe, start_date, end_date, safe_trading_mode
+            # Validate and sanitize input parameters
+            safe_params = self._validate_and_sanitize_params(
+                symbol, timeframe, start_date, end_date, trading_mode
             )
 
-            if not file_paths:
-                raise DataError(
-                    f"No data files found for {symbol} {timeframe} from {start_date.date()} to {end_date.date()}"
-                )
+            # Generate and validate file paths
+            file_paths = self._generate_file_paths(*safe_params)
+            self._validate_file_paths_exist(file_paths, symbol, timeframe, start_date, end_date)
 
-            # Determine processing strategy based on dataset size
-            chunk_threshold = 30  # Process in chunks if more than 30 files
-            missing_files = []
-
-            if len(file_paths) > chunk_threshold:
-                # Memory-efficient chunked processing for large datasets
-                logger.info(f"Using chunked processing for {len(file_paths)} files")
-                combined_df = await self._load_files_chunked(
-                    file_paths, start_date, end_date, chunk_size=10
-                )
-                # Chunked processing already logs statistics
-            else:
-                # Standard in-memory processing for smaller datasets
-                dataframes = []
-
-                for file_path in file_paths:
-                    try:
-                        df = await self._load_single_file(file_path)
-                        if not df.empty:
-                            dataframes.append(df)
-                    except FileNotFoundError:
-                        missing_files.append(file_path)
-                        logger.warning(f"Missing data file: {file_path}")
-
-                if not dataframes:
-                    raise DataError(f"No valid data files found for {symbol} {timeframe}")
-
-                # Concatenate and filter by date range
-                combined_df = pd.concat(dataframes, ignore_index=True)
-                combined_df = self._filter_by_date_range(combined_df, start_date, end_date)
-
-                # Log statistics for standard processing
-                logger.info(
-                    f"Loaded {len(combined_df)} rows for {symbol} {timeframe} "
-                    f"from {len(dataframes)} files ({len(missing_files)} missing)"
-                )
-
-            return combined_df
+            # Load data using appropriate strategy
+            return await self._execute_loading_strategy(
+                file_paths, start_date, end_date, symbol, timeframe
+            )
 
         except Exception as e:
-            if isinstance(e, DataError | ValidationError):
-                raise
-            # Sanitize error message to prevent information disclosure
-            logger.error(f"Data loading failed for {symbol} {timeframe}", exc_info=True)
-            raise DataError(f"Failed to load data for {symbol} {timeframe}") from e
+            return self._handle_loading_error(e, symbol, timeframe)
 
-    def _validate_load_params(
+    def _validate_and_sanitize_params(
         self,
         symbol: str,
         timeframe: str,
         start_date: datetime,
         end_date: datetime,
         trading_mode: str,
+    ) -> tuple[str, str, datetime, datetime, str]:
+        """Validate and sanitize input parameters."""
+        safe_trading_mode = CSVValidator.sanitize_path_component(trading_mode, "trading_mode")
+        safe_symbol = CSVValidator.sanitize_path_component(symbol, "symbol")
+        safe_timeframe = CSVValidator.sanitize_path_component(timeframe, "timeframe")
+
+        CSVValidator.validate_load_params(
+            safe_symbol, safe_timeframe, start_date, end_date, safe_trading_mode
+        )
+
+        return safe_symbol, safe_timeframe, start_date, end_date, safe_trading_mode
+
+    def _validate_file_paths_exist(
+        self,
+        file_paths: list[Path],
+        symbol: str,
+        timeframe: str,
+        start_date: datetime,
+        end_date: datetime,
     ) -> None:
-        """Validate data loading parameters."""
-        if not symbol:
-            raise ValidationError("Symbol cannot be empty")
+        """Validate that file paths were generated successfully."""
+        if not file_paths:
+            raise DataError(
+                f"No data files found for {symbol} {timeframe} from {start_date.date()} to {end_date.date()}"
+            )
 
-        if not timeframe:
-            raise ValidationError("Timeframe cannot be empty")
+    async def _execute_loading_strategy(
+        self,
+        file_paths: list[Path],
+        start_date: datetime,
+        end_date: datetime,
+        symbol: str = "",
+        timeframe: str = "",
+    ) -> pd.DataFrame:
+        """Execute appropriate loading strategy based on dataset size."""
+        chunk_threshold = 30
 
-        if start_date > end_date:
-            raise ValidationError("start_date must be before or equal to end_date")
+        if len(file_paths) > chunk_threshold:
+            return await self._load_chunked_dataset(file_paths, start_date, end_date)
+        else:
+            return await self._load_standard_dataset(
+                file_paths, start_date, end_date, symbol, timeframe
+            )
 
-        # Validate timeframe is supported
-        try:
-            Timeframe(timeframe)
-        except ValueError as e:
-            raise ValidationError(f"Unsupported timeframe: {timeframe}") from e
+    async def _load_chunked_dataset(
+        self, file_paths: list[Path], start_date: datetime, end_date: datetime
+    ) -> pd.DataFrame:
+        """Load large datasets using chunked processing."""
+        logger.info(f"Using chunked processing for {len(file_paths)} files")
+        return await self._load_files_chunked(file_paths, start_date, end_date, chunk_size=10)
 
-        if trading_mode not in ["spot", "futures"]:
-            raise ValidationError(f"Invalid trading mode: {trading_mode}")
+    async def _load_standard_dataset(
+        self,
+        file_paths: list[Path],
+        start_date: datetime,
+        end_date: datetime,
+        symbol: str = "",
+        timeframe: str = "",
+    ) -> pd.DataFrame:
+        """Load smaller datasets using standard in-memory processing."""
+        dataframes = []
+        missing_files = []
+
+        for file_path in file_paths:
+            try:
+                df = await self.cache_manager.load_single_file(file_path)
+                if not df.empty:
+                    dataframes.append(df)
+            except FileNotFoundError:
+                missing_files.append(file_path)
+                logger.warning(f"Missing data file: {file_path}")
+
+        if not dataframes:
+            raise DataError(f"No valid data files found for {symbol} {timeframe}")
+
+        # Concatenate and filter by date range
+        combined_df = pd.concat(dataframes, ignore_index=True)
+        combined_df = CSVUtils.filter_by_date_range(combined_df, start_date, end_date)
+
+        logger.info(
+            f"Loaded {len(combined_df)} rows from {len(dataframes)} files ({len(missing_files)} missing)"
+        )
+
+        return combined_df
+
+    def _handle_loading_error(self, error: Exception, symbol: str, timeframe: str) -> pd.DataFrame:
+        """Handle loading errors with proper exception chaining."""
+        if isinstance(error, DataError | ValidationError):
+            raise
+
+        logger.error(f"Data loading failed for {symbol} {timeframe}", exc_info=True)
+        raise DataError(f"Failed to load data for {symbol} {timeframe}") from error
 
     def _generate_file_paths(
         self,
@@ -189,7 +202,7 @@ class CSVDataLoader(IDataLoader):
         base_dir = self.data_dir / "binance" / trading_mode / symbol / timeframe
 
         # Validate the constructed path is within data directory
-        self._validate_path_safety(base_dir)
+        CSVValidator.validate_path_safety(base_dir, self.data_dir)
 
         # Generate daily file paths
         current_date = start_date.date()
@@ -202,101 +215,6 @@ class CSVDataLoader(IDataLoader):
             current_date += timedelta(days=1)
 
         return file_paths
-
-    def _sanitize_path_component(self, component: str, component_name: str) -> str:
-        """Sanitize path components to prevent traversal attacks."""
-        if not component:
-            raise ValidationError(f"{component_name.capitalize()} cannot be empty")
-
-        # Remove dangerous characters and sequences
-        if ".." in component or "/" in component or "\\" in component:
-            raise ValidationError(f"Invalid {component_name}: contains path traversal characters")
-
-        # Allow only alphanumeric, underscore, dash, and dot for valid filenames
-        safe_component = re.sub(r"[^a-zA-Z0-9_.-]", "", component)
-
-        if not safe_component or safe_component != component:
-            raise ValidationError(
-                f"Invalid {component_name}: '{component}' contains invalid characters. "
-                f"Only alphanumeric, underscore, dash, and dot are allowed."
-            )
-
-        # Additional length check
-        if len(safe_component) > 50:
-            raise ValidationError(f"{component_name.capitalize()} too long: maximum 50 characters")
-
-        return safe_component
-
-    def _validate_path_safety(self, path: Path) -> None:
-        """Validate that the constructed path is safe and within data directory."""
-        try:
-            # Resolve the path to detect any traversal attempts
-            resolved_path = path.resolve()
-            data_dir_resolved = self.data_dir.resolve()
-
-            # Check if the path is within the data directory
-            if not str(resolved_path).startswith(str(data_dir_resolved)):
-                raise ValidationError("Path traversal attempt detected")
-
-        except (OSError, ValueError) as e:
-            raise ValidationError(f"Invalid path construction: {str(e)}") from e
-
-    async def _load_single_file(self, file_path: Path) -> pd.DataFrame:
-        """Load a single CSV file with caching."""
-        # Include file modification time in cache key to handle file updates
-        if file_path.exists():
-            stat = file_path.stat()
-            cache_key = f"{file_path}:{stat.st_mtime_ns}"
-        else:
-            # File doesn't exist, will raise error below
-            cache_key = str(file_path)
-
-        # Check cache first (thread-safe)
-        with self._cache_lock:
-            if cache_key in self.cache:
-                logger.debug(f"Cache hit for {file_path}")
-                return self.cache[cache_key].copy()
-
-        # Load from disk
-        logger.debug(f"Loading file: {file_path}")
-
-        if not file_path.exists():
-            raise FileNotFoundError(f"Data file not found: {file_path}")
-
-        try:
-            # Run file I/O in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(
-                None,
-                lambda: pd.read_csv(
-                    file_path,
-                    dtype={
-                        "timestamp": "int64",
-                        "open": "float64",
-                        "high": "float64",
-                        "low": "float64",
-                        "close": "float64",
-                        "volume": "float64",
-                    },
-                ),
-            )
-
-            # Basic validation
-            self._validate_csv_structure(df, file_path)
-
-            # Cache the result (thread-safe)
-            with self._cache_lock:
-                self.cache[cache_key] = df.copy()
-
-            return df
-
-        except pd.errors.EmptyDataError:
-            logger.warning(f"Empty data file: {file_path}")
-            return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
-        except Exception as e:
-            # Sanitize error message to prevent path disclosure
-            logger.error(f"CSV file loading failed: {file_path.name}", exc_info=True)
-            raise DataError(f"Failed to load CSV file: {file_path.name}") from e
 
     async def _load_files_chunked(
         self, file_paths: list[Path], start_date: datetime, end_date: datetime, chunk_size: int = 10
@@ -331,10 +249,10 @@ class CSVDataLoader(IDataLoader):
 
         for file_path in chunk_paths:
             try:
-                df = await self._load_single_file(file_path)
+                df = await self.cache_manager.load_single_file(file_path)
                 if not df.empty:
                     # Filter data immediately to reduce memory usage
-                    df = self._filter_by_date_range(df, start_date, end_date)
+                    df = CSVUtils.filter_by_date_range(df, start_date, end_date)
                     if not df.empty:
                         chunk_dataframes.append(df)
             except FileNotFoundError:
@@ -369,118 +287,21 @@ class CSVDataLoader(IDataLoader):
 
         return combined_df
 
-    def _validate_csv_structure(self, df: pd.DataFrame, file_path: Path) -> None:
-        """Validate CSV file has expected structure."""
-        if df.empty:
-            return  # Empty files are handled separately
-
-        # Perform comprehensive CSV validation
-        self._validate_csv_columns(df, file_path)
-        self._validate_csv_data_integrity(df, file_path)
-
-    def _validate_csv_columns(self, df: pd.DataFrame, file_path: Path) -> None:
-        """Validate CSV file has required columns."""
-        expected_columns = ["timestamp", "open", "high", "low", "close", "volume"]
-        missing_columns = set(expected_columns) - set(df.columns)
-        if missing_columns:
-            raise DataError(f"CSV file {file_path} missing columns: {missing_columns}")
-
-    def _validate_csv_data_integrity(self, df: pd.DataFrame, file_path: Path) -> None:
-        """Validate CSV data integrity and value ranges."""
-        if len(df) == 0:
-            return
-
-        # Validate price ranges
-        self._validate_csv_price_ranges(df, file_path)
-
-        # Validate volume data
-        if (df["volume"] < 0).any():
-            raise DataError(f"Invalid volume data in {file_path}: negative volume values")
-
-        # Validate OHLC relationships
-        self._validate_csv_ohlc_relationships(df, file_path)
-
-    def _validate_csv_price_ranges(self, df: pd.DataFrame, file_path: Path) -> None:
-        """Validate price columns have positive values."""
-        price_columns = ["open", "high", "low", "close"]
-        for col in price_columns:
-            if (df[col] <= 0).any():
-                raise DataError(f"Invalid price data in {file_path}: {col} has non-positive values")
-
-    def _validate_csv_ohlc_relationships(self, df: pd.DataFrame, file_path: Path) -> None:
-        """Validate OHLC price relationships are logically consistent."""
-        invalid_ohlc = (
-            (df["high"] < df["low"])
-            | (df["high"] < df["open"])
-            | (df["high"] < df["close"])
-            | (df["low"] > df["open"])
-            | (df["low"] > df["close"])
-        )
-
-        if invalid_ohlc.any():
-            raise DataError(f"Invalid OHLC relationships in {file_path}")
-
-    def _filter_by_date_range(
-        self, df: pd.DataFrame, start_date: datetime, end_date: datetime
-    ) -> pd.DataFrame:
-        """Filter DataFrame to exact date range and sort by timestamp."""
-        if df.empty:
-            return df
-
-        # Convert to timestamps in milliseconds for direct comparison
-        start_ts = int(start_date.timestamp() * 1000)
-        end_ts = int(end_date.timestamp() * 1000)
-
-        # Filter by timestamp range directly
-        mask = (df["timestamp"] >= start_ts) & (df["timestamp"] <= end_ts)
-        filtered_df = df[mask].copy()
-
-        # Sort by timestamp and reset index
-        filtered_df = filtered_df.sort_values("timestamp").reset_index(drop=True)
-
-        return filtered_df
-
     def get_available_symbols(self, trading_mode: str = "futures") -> list[str]:
         """Get list of available symbols."""
-        binance_dir = self.data_dir / "binance" / trading_mode
-        if not binance_dir.exists():
-            return []
-
-        symbols = []
-        for symbol_dir in binance_dir.iterdir():
-            if symbol_dir.is_dir():
-                symbols.append(symbol_dir.name)
-
-        return sorted(symbols)
+        return CSVUtils.get_available_symbols(self.data_dir, trading_mode)
 
     def get_available_timeframes(self, symbol: str, trading_mode: str = "futures") -> list[str]:
         """Get list of available timeframes for a symbol."""
-        symbol_dir = self.data_dir / "binance" / trading_mode / symbol
-        if not symbol_dir.exists():
-            return []
-
-        timeframes = []
-        for tf_dir in symbol_dir.iterdir():
-            if tf_dir.is_dir():
-                timeframes.append(tf_dir.name)
-
-        return sorted(timeframes)
+        return CSVUtils.get_available_timeframes(self.data_dir, symbol, trading_mode)
 
     def clear_cache(self) -> None:
         """Clear the data cache (thread-safe)."""
-        with self._cache_lock:
-            self.cache.clear()
-        logger.info("Data cache cleared")
+        self.cache_manager.clear_cache()
 
     def get_cache_info(self) -> dict[str, int]:
         """Get cache statistics (thread-safe)."""
-        with self._cache_lock:
-            return {
-                "cache_size": len(self.cache),
-                "max_size": int(self.cache.maxsize) if self.cache.maxsize else 0,
-                "hits": getattr(self.cache, "hits", 0),
-                "misses": getattr(self.cache, "misses", 0),
-            }
+        return self.cache_manager.get_cache_info()
 
     async def close(self) -> None:
         """Clean up resources and close the data loader."""
