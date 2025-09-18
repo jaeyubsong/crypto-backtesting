@@ -14,6 +14,8 @@ from src.core.enums.timeframes import Timeframe
 from src.core.exceptions.backtest import DataError, ValidationError
 from src.core.interfaces.data import IDataProcessor
 
+from .technical_indicators import create_technical_indicators_calculator
+
 
 class OHLCVDataProcessor(IDataProcessor):
     """
@@ -333,7 +335,7 @@ class OHLCVDataProcessor(IDataProcessor):
 
     def calculate_basic_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Calculate basic technical indicators.
+        Calculate basic technical indicators using Strategy Pattern.
 
         Args:
             data: OHLCV DataFrame
@@ -341,69 +343,8 @@ class OHLCVDataProcessor(IDataProcessor):
         Returns:
             DataFrame with additional indicator columns
         """
-        if data.empty:
-            return data
-
-        try:
-            result = data.copy()
-
-            # Calculate different indicator categories
-            result = self._add_moving_averages(result)
-            result = self._add_macd_indicators(result)
-            result = self._add_rsi_indicator(result)
-            result = self._add_bollinger_bands(result)
-            result = self._add_vwap_indicator(result)
-
-            logger.info(f"Calculated basic indicators for {len(result)} rows")
-            return result
-
-        except Exception as e:
-            logger.error(f"Failed to calculate indicators: {str(e)}")
-            return data  # Return original data if indicator calculation fails
-
-    def _add_moving_averages(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add simple and exponential moving averages."""
-        # Simple moving averages
-        data["sma_20"] = data["close"].rolling(window=20).mean()
-        data["sma_50"] = data["close"].rolling(window=50).mean()
-
-        # Exponential moving averages
-        data["ema_12"] = data["close"].ewm(span=12).mean()
-        data["ema_26"] = data["close"].ewm(span=26).mean()
-
-        return data
-
-    def _add_macd_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add MACD (Moving Average Convergence Divergence) indicators."""
-        data["macd"] = data["ema_12"] - data["ema_26"]
-        data["macd_signal"] = data["macd"].ewm(span=9).mean()
-        data["macd_histogram"] = data["macd"] - data["macd_signal"]
-        return data
-
-    def _add_rsi_indicator(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add RSI (Relative Strength Index) indicator."""
-        delta = data["close"].diff()
-        gain = delta.where(delta > 0, 0).rolling(window=14).mean()
-        loss = (-delta).where(delta < 0, 0).rolling(window=14).mean()
-        rs = gain / loss
-        data["rsi"] = 100 - (100 / (1 + rs))
-        return data
-
-    def _add_bollinger_bands(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add Bollinger Bands indicators."""
-        bb_middle = data["close"].rolling(window=20).mean()
-        bb_std = data["close"].rolling(window=20).std()
-        data["bb_upper"] = bb_middle + (2 * bb_std)
-        data["bb_lower"] = bb_middle - (2 * bb_std)
-        data["bb_middle"] = bb_middle
-        return data
-
-    def _add_vwap_indicator(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add VWAP (Volume Weighted Average Price) indicator."""
-        vwap_num = (data["close"] * data["volume"]).cumsum()
-        vwap_den = data["volume"].cumsum()
-        data["vwap"] = vwap_num / vwap_den
-        return data
+        calculator = create_technical_indicators_calculator()
+        return calculator.calculate_all_indicators(data)
 
     def get_data_summary(self, data: pd.DataFrame) -> dict[str, Any]:
         """

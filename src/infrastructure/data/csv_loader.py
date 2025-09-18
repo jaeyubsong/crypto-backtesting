@@ -17,6 +17,7 @@ from src.core.interfaces.data import IDataLoader
 from .csv_cache import CSVCache
 from .csv_utils import CSVUtils
 from .csv_validator import CSVValidator
+from .loading_strategies import create_loading_strategy_selector
 
 
 class CSVDataLoader(IDataLoader):
@@ -31,16 +32,31 @@ class CSVDataLoader(IDataLoader):
     - Data validation and integrity checks
     """
 
-    def __init__(self, data_directory: str = "data", cache_size: int = 100):
+    # Configuration constants
+    DEFAULT_CACHE_SIZE = 100
+    CHUNK_THRESHOLD = 30  # Process in chunks if more than 30 files
+    DEFAULT_CHUNK_SIZE = 10
+
+    def __init__(
+        self,
+        data_directory: str = "data",
+        cache_size: int = DEFAULT_CACHE_SIZE,
+        strategy_hint: str | None = None,
+    ):
         """
         Initialize the CSV data loader.
 
         Args:
             data_directory: Root directory containing market data
             cache_size: Maximum number of cached DataFrames
+            strategy_hint: Optional loading strategy hint ("standard", "chunked", "streaming")
         """
         self.data_dir = Path(data_directory)
         self.cache_manager = CSVCache(cache_size)
+        self.strategy_selector = create_loading_strategy_selector(
+            chunk_threshold=self.CHUNK_THRESHOLD, default_chunk_size=self.DEFAULT_CHUNK_SIZE
+        )
+        self.strategy_hint = strategy_hint
         CSVUtils.validate_data_directory(self.data_dir)
 
     async def load_data(
@@ -83,6 +99,14 @@ class CSVDataLoader(IDataLoader):
                 file_paths, start_date, end_date, symbol, timeframe
             )
 
+        except (ValidationError, DataError):
+            raise
+        except FileNotFoundError as e:
+            logger.error(f"Required data files not found for {symbol} {timeframe}")
+            raise DataError(f"No data files found for {symbol} {timeframe}") from e
+        except PermissionError as e:
+            logger.error(f"Permission denied accessing data for {symbol} {timeframe}")
+            raise DataError(f"Permission denied accessing data for {symbol} {timeframe}") from e
         except Exception as e:
             return self._handle_loading_error(e, symbol, timeframe)
 
@@ -127,56 +151,19 @@ class CSVDataLoader(IDataLoader):
         symbol: str = "",
         timeframe: str = "",
     ) -> pd.DataFrame:
-        """Execute appropriate loading strategy based on dataset size."""
-        chunk_threshold = 30
-
-        if len(file_paths) > chunk_threshold:
-            return await self._load_chunked_dataset(file_paths, start_date, end_date)
-        else:
-            return await self._load_standard_dataset(
-                file_paths, start_date, end_date, symbol, timeframe
-            )
-
-    async def _load_chunked_dataset(
-        self, file_paths: list[Path], start_date: datetime, end_date: datetime
-    ) -> pd.DataFrame:
-        """Load large datasets using chunked processing."""
-        logger.info(f"Using chunked processing for {len(file_paths)} files")
-        return await self._load_files_chunked(file_paths, start_date, end_date, chunk_size=10)
-
-    async def _load_standard_dataset(
-        self,
-        file_paths: list[Path],
-        start_date: datetime,
-        end_date: datetime,
-        symbol: str = "",
-        timeframe: str = "",
-    ) -> pd.DataFrame:
-        """Load smaller datasets using standard in-memory processing."""
-        dataframes = []
-        missing_files = []
-
-        for file_path in file_paths:
-            try:
-                df = await self.cache_manager.load_single_file(file_path)
-                if not df.empty:
-                    dataframes.append(df)
-            except FileNotFoundError:
-                missing_files.append(file_path)
-                logger.warning(f"Missing data file: {file_path}")
-
-        if not dataframes:
-            raise DataError(f"No valid data files found for {symbol} {timeframe}")
-
-        # Concatenate and filter by date range
-        combined_df = pd.concat(dataframes, ignore_index=True)
-        combined_df = CSVUtils.filter_by_date_range(combined_df, start_date, end_date)
-
-        logger.info(
-            f"Loaded {len(combined_df)} rows from {len(dataframes)} files ({len(missing_files)} missing)"
+        """Execute appropriate loading strategy using Strategy Pattern."""
+        strategy = self.strategy_selector.select_strategy(len(file_paths), self.strategy_hint)
+        return await strategy.load_data(
+            file_paths, start_date, end_date, self.cache_manager, symbol, timeframe
         )
 
-        return combined_df
+    def set_strategy_hint(self, strategy_hint: str | None) -> None:
+        """Set the loading strategy hint for future operations."""
+        self.strategy_hint = strategy_hint
+
+    def get_available_strategies(self) -> list[str]:
+        """Get list of available loading strategies."""
+        return self.strategy_selector.get_available_strategies()
 
     def _handle_loading_error(self, error: Exception, symbol: str, timeframe: str) -> pd.DataFrame:
         """Handle loading errors with proper exception chaining."""
@@ -216,77 +203,6 @@ class CSVDataLoader(IDataLoader):
 
         return file_paths
 
-    async def _load_files_chunked(
-        self, file_paths: list[Path], start_date: datetime, end_date: datetime, chunk_size: int = 10
-    ) -> pd.DataFrame:
-        """Load files in chunks to optimize memory usage for large datasets."""
-        all_data = []
-        missing_count = 0
-
-        # Process files in chunks
-        for i in range(0, len(file_paths), chunk_size):
-            chunk_paths = file_paths[i : i + chunk_size]
-            chunk_data, chunk_missing = await self._process_chunk_files(
-                chunk_paths, start_date, end_date
-            )
-
-            if chunk_data is not None:
-                all_data.append(chunk_data)
-            missing_count += chunk_missing
-
-            # Log chunk progress
-            total_chunks = (len(file_paths) + chunk_size - 1) // chunk_size
-            logger.debug(f"Processed chunk {i // chunk_size + 1}/{total_chunks}")
-
-        return self._finalize_chunked_data(all_data, file_paths, missing_count)
-
-    async def _process_chunk_files(
-        self, chunk_paths: list[Path], start_date: datetime, end_date: datetime
-    ) -> tuple[pd.DataFrame | None, int]:
-        """Process files in a single chunk and return concatenated data."""
-        chunk_dataframes = []
-        missing_count = 0
-
-        for file_path in chunk_paths:
-            try:
-                df = await self.cache_manager.load_single_file(file_path)
-                if not df.empty:
-                    # Filter data immediately to reduce memory usage
-                    df = CSVUtils.filter_by_date_range(df, start_date, end_date)
-                    if not df.empty:
-                        chunk_dataframes.append(df)
-            except FileNotFoundError:
-                missing_count += 1
-                logger.warning(f"Missing data file: {file_path}")
-
-        # Concatenate chunk files if any data found
-        chunk_data = None
-        if chunk_dataframes:
-            chunk_data = pd.concat(chunk_dataframes, ignore_index=True)
-
-        return chunk_data, missing_count
-
-    def _finalize_chunked_data(
-        self, all_data: list[pd.DataFrame], file_paths: list[Path], missing_count: int
-    ) -> pd.DataFrame:
-        """Finalize chunked data processing with concatenation and cleanup."""
-        if not all_data:
-            raise DataError("No valid data found in any chunks")
-
-        # Final concatenation of all chunks
-        combined_df = pd.concat(all_data, ignore_index=True)
-
-        # Sort by timestamp and remove duplicates
-        combined_df = combined_df.sort_values("timestamp").drop_duplicates(
-            subset=["timestamp"], keep="first"
-        )
-
-        logger.info(
-            f"Chunked loading complete: {len(combined_df)} rows from {len(file_paths)} files ({missing_count} missing)"
-        )
-
-        return combined_df
-
     def get_available_symbols(self, trading_mode: str = "futures") -> list[str]:
         """Get list of available symbols."""
         return CSVUtils.get_available_symbols(self.data_dir, trading_mode)
@@ -299,7 +215,7 @@ class CSVDataLoader(IDataLoader):
         """Clear the data cache (thread-safe)."""
         self.cache_manager.clear_cache()
 
-    def get_cache_info(self) -> dict[str, int]:
+    def get_cache_info(self) -> dict[str, int | float]:
         """Get cache statistics (thread-safe)."""
         return self.cache_manager.get_cache_info()
 
