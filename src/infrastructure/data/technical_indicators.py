@@ -10,6 +10,8 @@ from typing import Protocol
 import pandas as pd
 from loguru import logger
 
+from src.core.exceptions.backtest import DataError
+
 
 class IndicatorStrategy(Protocol):
     """Protocol for technical indicator calculation strategies."""
@@ -162,14 +164,29 @@ class TechnicalIndicatorsCalculator:
             # Apply all strategies in sequence
             for name, strategy in self._strategies.items():
                 logger.debug(f"Calculating {name} indicators")
-                result = strategy.calculate(result)
+                try:
+                    result = strategy.calculate(result)
+                except (ValueError, TypeError, KeyError) as strategy_error:
+                    logger.warning(f"Failed to calculate {name} indicator: {strategy_error}")
+                    # Continue with other indicators instead of failing completely
+                    continue
+                except Exception as unexpected_error:
+                    logger.error(
+                        f"Unexpected error calculating {name} indicator: {unexpected_error}"
+                    )
+                    raise DataError(
+                        f"Technical indicator calculation failed for {name}"
+                    ) from unexpected_error
 
             logger.info(f"Calculated all technical indicators for {len(result)} rows")
             return result
 
+        except DataError:
+            # Re-raise DataError as is
+            raise
         except Exception as e:
             logger.error(f"Failed to calculate indicators: {str(e)}")
-            return data  # Return original data if calculation fails
+            raise DataError(f"Technical indicators calculation failed: {str(e)}") from e
 
     def calculate_specific_indicators(
         self, data: pd.DataFrame, indicator_names: list[str]

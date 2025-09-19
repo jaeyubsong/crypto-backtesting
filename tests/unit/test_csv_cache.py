@@ -178,24 +178,34 @@ class TestCSVCache:
 
     async def test_should_clear_cache_when_memory_limit_exceeded(self, cache: CSVCache) -> None:
         """Test automatic cache clearing when memory limit is exceeded."""
-        # Mock memory usage to trigger limit
-        with patch.object(cache, "MAX_MEMORY_MB", 0.001):  # Very small limit
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
-                f.write("timestamp,open,high,low,close,volume\n")
-                # Write more data to exceed tiny memory limit
-                for i in range(1000):
-                    f.write(f"{1640995200000 + i},46000.0,47000.0,45500.0,46500.0,100.5\n")
-                large_file = Path(f.name)
+        # First add a small file to the cache
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            f.write("timestamp,open,high,low,close,volume\n")
+            f.write("1640995200000,46000.0,47000.0,45500.0,46500.0,100.5\n")
+            small_file = Path(f.name)
 
-            try:
-                # This should trigger cache clearing due to memory limit
-                await cache.load_single_file(large_file)
-                # Memory should be tracked but cache might be cleared
-                cache_info = cache.get_cache_info()
-                # Should have data but memory management is working
-                assert cache_info["memory_usage_mb"] >= 0
-            finally:
-                large_file.unlink()
+        try:
+            # Load small file first
+            await cache.load_single_file(small_file)
+            assert cache.get_cache_info()["cache_size"] == 1
+
+            # Now mock very small memory limit to trigger clearing
+            with patch.object(cache, "MAX_MEMORY_MB", 0.001):  # Very small limit
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f2:
+                    f2.write("timestamp,open,high,low,close,volume\n")
+                    f2.write("1640995200001,46001.0,47001.0,45501.0,46501.0,100.6\n")
+                    second_file = Path(f2.name)
+
+                try:
+                    # This should trigger cache clearing since total memory would exceed limit
+                    await cache.load_single_file(second_file)
+                    # After loading, cache should be managed (either cleared or contains the new file)
+                    cache_info = cache.get_cache_info()
+                    assert cache_info["memory_usage_mb"] >= 0
+                finally:
+                    second_file.unlink()
+        finally:
+            small_file.unlink()
 
     async def test_should_recalculate_memory_usage_accurately(
         self, cache_with_observer: tuple[CSVCache, MockCacheObserver]

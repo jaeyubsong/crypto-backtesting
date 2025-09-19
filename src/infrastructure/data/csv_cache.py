@@ -148,6 +148,12 @@ class CSVCache(CacheSubject, ICacheManager):
         # Estimate memory usage (rough approximation)
         df_memory_mb = df.memory_usage(deep=True).sum() / (1024 * 1024)
 
+        # Prevent caching if single DataFrame exceeds memory limit
+        if df_memory_mb > self.MAX_MEMORY_MB:
+            raise MemoryError(
+                f"DataFrame size ({df_memory_mb:.1f}MB) exceeds cache memory limit ({self.MAX_MEMORY_MB}MB)"
+            )
+
         with self._cache_lock:
             # Check if adding this would exceed memory limit
             if self._memory_usage_mb + df_memory_mb > self.MAX_MEMORY_MB:
@@ -216,6 +222,12 @@ class CSVCache(CacheSubject, ICacheManager):
     async def set(self, key: str, value: pd.DataFrame) -> None:
         """Store data in cache (ICacheManager interface)."""
         df_memory_mb = value.memory_usage(deep=True).sum() / (1024 * 1024)
+
+        # Prevent caching if single DataFrame exceeds memory limit
+        if df_memory_mb > self.MAX_MEMORY_MB:
+            raise MemoryError(
+                f"DataFrame size ({df_memory_mb:.1f}MB) exceeds cache memory limit ({self.MAX_MEMORY_MB}MB)"
+            )
 
         with self._cache_lock:
             if self._memory_usage_mb + df_memory_mb > self.MAX_MEMORY_MB:

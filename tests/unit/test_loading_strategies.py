@@ -20,9 +20,11 @@ from src.core.exceptions.backtest import DataError
 from src.infrastructure.data.loading_strategies import (
     ChunkedLoadingStrategy,
     DataLoadingStrategy,
-    LoadingStrategySelector,
     StandardLoadingStrategy,
     StreamingLoadingStrategy,
+)
+from src.infrastructure.data.loading_strategy_selector import (
+    LoadingStrategySelector,
     create_loading_strategy_selector,
 )
 
@@ -410,33 +412,41 @@ class TestDataLoadingStrategies:
         """Test strategy selection for small datasets."""
         selector = LoadingStrategySelector()
 
-        strategy = selector.select_strategy(file_count=10)
+        # Create dummy file paths
+        file_paths_10 = [Path(f"file_{i}.csv") for i in range(10)]
+        strategy = selector.select_strategy(file_paths_10)
         assert isinstance(strategy, StandardLoadingStrategy)
 
-        strategy = selector.select_strategy(file_count=29)  # Just below threshold
+        file_paths_29 = [Path(f"file_{i}.csv") for i in range(29)]  # Just below threshold
+        strategy = selector.select_strategy(file_paths_29)
         assert isinstance(strategy, StandardLoadingStrategy)
 
     def test_strategy_selector_should_select_chunked_for_medium_datasets(self) -> None:
         """Test strategy selection for medium datasets."""
         selector = LoadingStrategySelector()
 
-        strategy = selector.select_strategy(file_count=30)  # At threshold
+        file_paths_30 = [Path(f"file_{i}.csv") for i in range(30)]  # At threshold
+        strategy = selector.select_strategy(file_paths_30)
         assert isinstance(strategy, ChunkedLoadingStrategy)
 
-        strategy = selector.select_strategy(file_count=50)
+        file_paths_50 = [Path(f"file_{i}.csv") for i in range(50)]
+        strategy = selector.select_strategy(file_paths_50)
         assert isinstance(strategy, ChunkedLoadingStrategy)
 
-        strategy = selector.select_strategy(file_count=99)  # Just below streaming threshold
+        file_paths_99 = [Path(f"file_{i}.csv") for i in range(99)]  # Just below streaming threshold
+        strategy = selector.select_strategy(file_paths_99)
         assert isinstance(strategy, ChunkedLoadingStrategy)
 
     def test_strategy_selector_should_select_streaming_for_large_datasets(self) -> None:
         """Test strategy selection for large datasets."""
         selector = LoadingStrategySelector()
 
-        strategy = selector.select_strategy(file_count=100)  # At streaming threshold
+        file_paths_100 = [Path(f"file_{i}.csv") for i in range(100)]  # At streaming threshold
+        strategy = selector.select_strategy(file_paths_100)
         assert isinstance(strategy, StreamingLoadingStrategy)
 
-        strategy = selector.select_strategy(file_count=500)
+        file_paths_500 = [Path(f"file_{i}.csv") for i in range(500)]
+        strategy = selector.select_strategy(file_paths_500)
         assert isinstance(strategy, StreamingLoadingStrategy)
 
     def test_strategy_selector_should_honor_explicit_hints(self) -> None:
@@ -444,15 +454,17 @@ class TestDataLoadingStrategies:
         selector = LoadingStrategySelector()
 
         # Force standard strategy even for large dataset
-        strategy = selector.select_strategy(file_count=200, strategy_hint="standard")
+        file_paths_200 = [Path(f"file_{i}.csv") for i in range(200)]
+        strategy = selector.select_strategy(file_paths_200, strategy_hint="standard")
         assert isinstance(strategy, StandardLoadingStrategy)
 
         # Force streaming strategy even for small dataset
-        strategy = selector.select_strategy(file_count=5, strategy_hint="streaming")
+        file_paths_5 = [Path(f"file_{i}.csv") for i in range(5)]
+        strategy = selector.select_strategy(file_paths_5, strategy_hint="streaming")
         assert isinstance(strategy, StreamingLoadingStrategy)
 
         # Force chunked strategy
-        strategy = selector.select_strategy(file_count=5, strategy_hint="chunked")
+        strategy = selector.select_strategy(file_paths_5, strategy_hint="chunked")
         assert isinstance(strategy, ChunkedLoadingStrategy)
 
     def test_strategy_selector_should_ignore_invalid_hints(self) -> None:
@@ -460,7 +472,8 @@ class TestDataLoadingStrategies:
         selector = LoadingStrategySelector()
 
         # Invalid hint should fall back to auto-selection
-        strategy = selector.select_strategy(file_count=10, strategy_hint="invalid_strategy")
+        file_paths_10 = [Path(f"file_{i}.csv") for i in range(10)]
+        strategy = selector.select_strategy(file_paths_10, strategy_hint="invalid_strategy")
         assert isinstance(strategy, StandardLoadingStrategy)
 
     def test_strategy_selector_should_provide_available_strategies(self) -> None:
@@ -601,7 +614,8 @@ class TestDataLoadingStrategies:
 
         def select_strategy() -> None:
             try:
-                strategy = selector.select_strategy(file_count=25)
+                file_paths_25 = [Path(f"file_{i}.csv") for i in range(25)]
+                strategy = selector.select_strategy(file_paths_25)
                 results.append(type(strategy).__name__)
             except Exception as e:
                 errors.append(e)

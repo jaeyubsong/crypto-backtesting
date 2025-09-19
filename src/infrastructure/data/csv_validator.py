@@ -73,13 +73,23 @@ class CSVValidator:
     def validate_path_safety(path: Path, data_dir: Path) -> None:
         """Validate that the constructed path is safe and within data directory."""
         try:
-            # Resolve the path to detect any traversal attempts
+            # Resolve both paths to detect any traversal attempts
             resolved_path = path.resolve()
             data_dir_resolved = data_dir.resolve()
 
             # Check if the path is within the data directory
             if not str(resolved_path).startswith(str(data_dir_resolved)):
                 raise ValidationError("Path traversal attempt detected")
+
+            # Check for symlinks only within the data directory to prevent symlink attacks
+            # We'll check if the target file itself or any path component within data_dir is a symlink
+            relative_path = resolved_path.relative_to(data_dir_resolved)
+            check_path = data_dir_resolved
+
+            for part in relative_path.parts:
+                check_path = check_path / part
+                if check_path.exists() and check_path.is_symlink():
+                    raise ValidationError(f"Symlink detected in data directory path: {check_path}")
 
         except (OSError, ValueError) as e:
             raise ValidationError(f"Invalid path construction: {str(e)}") from e

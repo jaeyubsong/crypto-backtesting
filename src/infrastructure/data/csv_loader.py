@@ -17,7 +17,7 @@ from src.core.interfaces.data import IDataLoader
 from .csv_cache import CSVCache
 from .csv_utils import CSVUtils
 from .csv_validator import CSVValidator
-from .loading_strategies import create_loading_strategy_selector
+from .loading_strategy_selector import create_loading_strategy_selector
 
 
 class CSVDataLoader(IDataLoader):
@@ -152,7 +152,7 @@ class CSVDataLoader(IDataLoader):
         timeframe: str = "",
     ) -> pd.DataFrame:
         """Execute appropriate loading strategy using Strategy Pattern."""
-        strategy = self.strategy_selector.select_strategy(len(file_paths), self.strategy_hint)
+        strategy = self.strategy_selector.select_strategy(file_paths, self.strategy_hint)
         return await strategy.load_data(
             file_paths, start_date, end_date, self.cache_manager, symbol, timeframe
         )

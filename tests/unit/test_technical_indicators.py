@@ -412,7 +412,7 @@ class TestTechnicalIndicators:
         from unittest.mock import Mock
 
         faulty_strategy = Mock()
-        faulty_strategy.calculate.side_effect = Exception("Calculation error")
+        faulty_strategy.calculate.side_effect = ValueError("Invalid data for calculation")
         calculator.add_strategy("faulty", faulty_strategy)
 
         # Should not crash and return original data
