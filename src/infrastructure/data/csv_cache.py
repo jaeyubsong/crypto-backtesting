@@ -21,7 +21,9 @@ from .cache_interfaces import (
     ICacheManager,
     create_standard_cache_observers,
 )
+from .cache_statistics import CacheStatistics
 from .csv_validator import CSVValidator
+from .memory_tracker import MemoryTracker
 
 
 class CSVCache(CacheSubject, ICacheManager):
@@ -42,16 +44,27 @@ class CSVCache(CacheSubject, ICacheManager):
 
         self.cache: LRUCache = LRUCache(maxsize=cache_size)
         self._cache_lock = RLock()  # Thread-safe cache access
-        self._memory_usage_mb = 0.0  # Track approximate memory usage
 
-        # Track cache statistics
-        self._cache_hits = 0
-        self._cache_misses = 0
+        # Initialize components
+        self._statistics = CacheStatistics()
+        self._memory_tracker = MemoryTracker(memory_limit_mb=self.MAX_MEMORY_MB)
 
         # Set up default observers if enabled
         if enable_observers:
             for observer in create_standard_cache_observers():
                 self.add_observer(observer)
+
+    @property
+    def _memory_usage_mb(self) -> float:
+        """Backward compatibility accessor for memory usage."""
+        return self._memory_tracker.get_memory_usage()
+
+    @_memory_usage_mb.setter
+    def _memory_usage_mb(self, value: float) -> None:
+        """Backward compatibility setter for memory usage (for testing)."""
+        # This is primarily for test compatibility
+        # Direct manipulation should be avoided in production code
+        self._memory_tracker._memory_usage_mb = value
 
     async def load_single_file(self, file_path: Path) -> pd.DataFrame:
         """Load a single CSV file with caching."""
@@ -91,7 +104,7 @@ class CSVCache(CacheSubject, ICacheManager):
         """Check cache for existing entry and return if found."""
         with self._cache_lock:
             if cache_key in self.cache:
-                self._cache_hits += 1
+                self._statistics.record_hit()
                 logger.debug(f"Cache hit for {file_path}")
                 # Notify observers of cache hit
                 self.notify_observers(
@@ -103,7 +116,7 @@ class CSVCache(CacheSubject, ICacheManager):
                 )
                 return self.cache[cache_key].copy()
             else:
-                self._cache_misses += 1
+                self._statistics.record_miss()
                 # Notify observers of cache miss
                 self.notify_observers(
                     CacheEvent(
@@ -145,28 +158,26 @@ class CSVCache(CacheSubject, ICacheManager):
         """Validate DataFrame and cache the result with memory tracking."""
         CSVValidator.validate_csv_structure(df, file_path)
 
-        # Estimate memory usage (rough approximation)
-        df_memory_mb = df.memory_usage(deep=True).sum() / (1024 * 1024)
-
-        # Prevent caching if single DataFrame exceeds memory limit
-        if df_memory_mb > self.MAX_MEMORY_MB:
-            raise MemoryError(
-                f"DataFrame size ({df_memory_mb:.1f}MB) exceeds cache memory limit ({self.MAX_MEMORY_MB}MB)"
-            )
+        # Check memory BEFORE adding to cache to prevent overages
+        can_add, df_memory_mb = self._memory_tracker.check_memory_before_add(df)
 
         with self._cache_lock:
-            # Check if adding this would exceed memory limit
-            if self._memory_usage_mb + df_memory_mb > self.MAX_MEMORY_MB:
+            # Clear cache if needed to make room
+            while not can_add:
+                if not self.cache:  # No more items to remove
+                    raise MemoryError("Cannot fit data in cache even after clearing")
                 logger.warning(
-                    f"Cache memory limit approached ({self._memory_usage_mb:.1f}MB), clearing cache"
+                    f"Cache memory limit approached ({self._memory_tracker.get_memory_usage():.1f}MB), clearing cache"
                 )
                 self._clear_cache_internal()
+                can_add, df_memory_mb = self._memory_tracker.check_memory_before_add(df)
 
+            # Now safe to add to cache
             self.cache[cache_key] = df.copy()
-            self._memory_usage_mb += df_memory_mb
+            self._memory_tracker.add_memory_usage(df_memory_mb)
 
             logger.debug(
-                f"Cached {file_path.name} ({df_memory_mb:.1f}MB), total cache: {self._memory_usage_mb:.1f}MB"
+                f"Cached {file_path.name} ({df_memory_mb:.1f}MB), total cache: {self._memory_tracker.get_memory_usage():.1f}MB"
             )
 
         return df
@@ -184,7 +195,7 @@ class CSVCache(CacheSubject, ICacheManager):
         """Clear the data cache (thread-safe)."""
         with self._cache_lock:
             old_size = len(self.cache)
-            old_memory = self._memory_usage_mb
+            old_memory = self._memory_tracker.get_memory_usage()
             self._clear_cache_internal()
 
             # Notify observers of cache clear
@@ -204,53 +215,52 @@ class CSVCache(CacheSubject, ICacheManager):
     def _clear_cache_internal(self) -> None:
         """Internal cache clearing without additional locking."""
         self.cache.clear()
-        self._memory_usage_mb = 0.0
+        self._memory_tracker.clear_memory_usage()
 
     # ICacheManager interface implementation
     async def get(self, key: str) -> pd.DataFrame | None:
         """Retrieve data from cache (ICacheManager interface)."""
         with self._cache_lock:
             if key in self.cache:
-                self._cache_hits += 1
+                self._statistics.record_hit()
                 self.notify_observers(CacheEvent(CacheEventType.CACHE_HIT, key))
                 return self.cache[key].copy()
             else:
-                self._cache_misses += 1
+                self._statistics.record_miss()
                 self.notify_observers(CacheEvent(CacheEventType.CACHE_MISS, key))
                 return None
 
     async def set(self, key: str, value: pd.DataFrame) -> None:
         """Store data in cache (ICacheManager interface)."""
-        df_memory_mb = value.memory_usage(deep=True).sum() / (1024 * 1024)
-
-        # Prevent caching if single DataFrame exceeds memory limit
-        if df_memory_mb > self.MAX_MEMORY_MB:
-            raise MemoryError(
-                f"DataFrame size ({df_memory_mb:.1f}MB) exceeds cache memory limit ({self.MAX_MEMORY_MB}MB)"
-            )
+        # Check memory BEFORE adding to cache
+        can_add, df_memory_mb = self._memory_tracker.check_memory_before_add(value)
 
         with self._cache_lock:
-            if self._memory_usage_mb + df_memory_mb > self.MAX_MEMORY_MB:
+            # Clear cache if needed to make room
+            while not can_add:
+                if not self.cache:  # No more items to remove
+                    raise MemoryError("Cannot fit data in cache even after clearing")
                 self.notify_observers(
                     CacheEvent(
                         CacheEventType.MEMORY_WARNING,
                         key,
-                        {
-                            "memory_usage_percent": (self._memory_usage_mb / self.MAX_MEMORY_MB)
-                            * 100
-                        },
+                        {"memory_usage_percent": self._memory_tracker.get_memory_usage_percent()},
                     )
                 )
                 self._clear_cache_internal()
+                can_add, df_memory_mb = self._memory_tracker.check_memory_before_add(value)
 
             self.cache[key] = value.copy()
-            self._memory_usage_mb += df_memory_mb
+            self._memory_tracker.add_memory_usage(df_memory_mb)
 
             self.notify_observers(
                 CacheEvent(
                     CacheEventType.CACHE_SET,
                     key,
-                    {"data_size_mb": df_memory_mb, "total_memory_mb": self._memory_usage_mb},
+                    {
+                        "data_size_mb": df_memory_mb,
+                        "total_memory_mb": self._memory_tracker.get_memory_usage(),
+                    },
                 )
             )
 
@@ -265,44 +275,15 @@ class CSVCache(CacheSubject, ICacheManager):
     def recalculate_memory_usage(self) -> float:
         """Recalculate actual memory usage from cached DataFrames (thread-safe)."""
         with self._cache_lock:
-            total_memory_mb = 0.0
-            for df in self.cache.values():
-                total_memory_mb += df.memory_usage(deep=True).sum() / (1024 * 1024)
-
-            old_memory = self._memory_usage_mb
-            self._memory_usage_mb = total_memory_mb
-
-            # Notify observers if memory usage changed significantly (>5% difference)
-            if abs(old_memory - total_memory_mb) > (old_memory * 0.05):
-                self.notify_observers(
-                    CacheEvent(
-                        CacheEventType.MEMORY_WARNING,
-                        "memory_recalculation",
-                        metadata={
-                            "old_memory_mb": old_memory,
-                            "new_memory_mb": total_memory_mb,
-                            "drift_mb": total_memory_mb - old_memory,
-                        },
-                    )
-                )
-                logger.info(
-                    f"Memory usage recalculated: {old_memory:.1f}MB → {total_memory_mb:.1f}MB "
-                    f"(drift: {total_memory_mb - old_memory:+.1f}MB)"
-                )
-
-            return total_memory_mb
+            cache_values = list(self.cache.values())
+            return self._memory_tracker.recalculate_memory_from_cache(cache_values, self)
 
     def get_cache_info(self) -> dict[str, int | float]:
         """Get cache statistics (thread-safe)."""
         with self._cache_lock:
-            return {
-                "cache_size": len(self.cache),
-                "max_size": int(self.cache.maxsize) if self.cache.maxsize else 0,
-                "memory_usage_mb": round(self._memory_usage_mb, 2),
-                "memory_limit_mb": self.MAX_MEMORY_MB,
-                "memory_usage_percent": round(
-                    (self._memory_usage_mb / self.MAX_MEMORY_MB) * 100, 1
-                ),
-                "hits": self._cache_hits,
-                "misses": self._cache_misses,
-            }
+            return self._statistics.get_detailed_stats(
+                cache_size=len(self.cache),
+                max_size=int(self.cache.maxsize) if self.cache.maxsize else 0,
+                memory_usage_mb=self._memory_tracker.get_memory_usage(),
+                memory_limit_mb=self.MAX_MEMORY_MB,
+            )

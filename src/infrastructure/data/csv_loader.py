@@ -236,5 +236,11 @@ class CSVDataLoader(IDataLoader):
     async def __aexit__(
         self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object
     ) -> None:
-        """Async context manager exit with cleanup."""
-        await self.close()
+        """Async context manager exit with robust cleanup."""
+        try:
+            await self.close()
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {cleanup_error}")
+            if exc_type is None:  # No original exception
+                raise  # Re-raise cleanup error
+            # Otherwise, log cleanup error but don't mask original exception

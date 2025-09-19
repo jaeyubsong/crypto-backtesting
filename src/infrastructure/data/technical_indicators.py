@@ -220,7 +220,7 @@ class TechnicalIndicatorsCalculator:
 
         except Exception as e:
             logger.error(f"Failed to calculate specific indicators: {str(e)}")
-            return data
+            raise DataError(f"Specific technical indicators calculation failed: {str(e)}") from e
 
     def get_available_indicators(self) -> list[str]:
         """Get list of available indicator strategies."""
