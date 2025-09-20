@@ -14,7 +14,12 @@ class IDataLoader(ABC):
 
     @abstractmethod
     async def load_data(
-        self, symbol: str, timeframe: str, start_date: datetime, end_date: datetime
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: datetime,
+        end_date: datetime,
+        trading_mode: str = "futures",
     ) -> pd.DataFrame:
         """Load OHLCV data for the specified parameters."""
         pass

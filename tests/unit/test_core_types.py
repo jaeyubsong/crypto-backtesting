@@ -6,7 +6,8 @@ Testing that protocols work correctly and type aliases are valid.
 from datetime import UTC, datetime
 
 from src.core.enums import ActionType, PositionType, Symbol
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
+from src.core.models.trade import Trade
 from src.core.protocols import IPosition, ITrade, PositionDict, PriceDict
 
 

@@ -9,7 +9,8 @@ import pytest
 
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import ValidationError
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
+from src.core.models.trade import Trade
 
 
 class TestPositionFactoryMethods:

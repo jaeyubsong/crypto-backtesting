@@ -11,7 +11,8 @@ from typing import Any
 
 from src.core.enums import Symbol, TradingMode
 from src.core.interfaces.portfolio import IPortfolio
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
+from src.core.models.trade import Trade
 
 from .portfolio_core import PortfolioCore
 from .portfolio_metrics import PortfolioMetrics
