@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 from src.core.constants import DEFAULT_TAKER_FEE, MIN_TRADE_SIZE
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import InsufficientFundsError, ValidationError
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
+from src.core.models.trade import Trade
 
 from .portfolio_helpers import (
     FeeCalculator,

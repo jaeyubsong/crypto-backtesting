@@ -32,7 +32,7 @@ class TestDataLayerIntegration:
     ) -> None:
         """Test loading and processing real data from files."""
         # Check if we have real data available
-        data_path = Path("data/binance/futures/BTCUSDT/1h")
+        data_path = Path("tests/fixtures/data/binance/futures/BTCUSDT/1h")
         if not data_path.exists():
             pytest.skip("No real data files available for integration test")
 
@@ -114,7 +114,7 @@ class TestDataLayerIntegration:
     @pytest.mark.asyncio
     async def test_should_cache_data_effectively(self, loader: CSVDataLoader) -> None:
         """Test that caching works effectively."""
-        data_path = Path("data/binance/futures/BTCUSDT/1h")
+        data_path = Path("tests/fixtures/data/binance/futures/BTCUSDT/1h")
         if not data_path.exists():
             pytest.skip("No real data files available for caching test")
 
@@ -149,7 +149,7 @@ class TestDataLayerIntegration:
     @pytest.mark.asyncio
     async def test_should_handle_different_timeframes(self, loader: CSVDataLoader) -> None:
         """Test loading data for different timeframes."""
-        data_path = Path("data/binance/futures/BTCUSDT")
+        data_path = Path("tests/fixtures/data/binance/futures/BTCUSDT")
         if not data_path.exists():
             pytest.skip("No real data files available for timeframe test")
 

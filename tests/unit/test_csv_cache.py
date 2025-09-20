@@ -319,9 +319,12 @@ class TestCSVCache:
         observer = MockCacheObserver()
 
         cache.add_observer(observer)
+        initial_count = len(cache._observers)
         cache.add_observer(observer)  # Add same observer again
 
-        assert cache._observers.count(observer) == 1
+        # WeakSet automatically prevents duplicates
+        assert len(cache._observers) == initial_count == 1
+        assert observer in cache._observers
 
     async def test_should_notify_observers_of_cache_events(
         self, cache_with_observer: tuple[CSVCache, MockCacheObserver], temp_csv_file: Path

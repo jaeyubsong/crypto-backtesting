@@ -5,6 +5,7 @@ This module provides abstract interfaces for caching systems and implements
 the Observer Pattern for cache event monitoring and notification.
 """
 
+import weakref
 from abc import ABC, abstractmethod
 from enum import Enum
 from threading import RLock
@@ -85,28 +86,28 @@ class CacheSubject:
     """Subject class implementing the Observer Pattern for cache events."""
 
     def __init__(self) -> None:
-        """Initialize cache subject with observer management."""
-        self._observers: list[CacheObserver] = []
+        """Initialize cache subject with observer management using weak references."""
+        self._observers: weakref.WeakSet[CacheObserver] = weakref.WeakSet()
         self._observers_lock = RLock()
 
     def add_observer(self, observer: CacheObserver) -> None:
         """Add an observer to the notification list."""
         with self._observers_lock:
-            if observer not in self._observers:
-                self._observers.append(observer)
-                logger.debug(f"Added cache observer: {type(observer).__name__}")
+            self._observers.add(observer)
+            logger.debug(f"Added cache observer: {type(observer).__name__}")
 
     def remove_observer(self, observer: CacheObserver) -> None:
         """Remove an observer from the notification list."""
         with self._observers_lock:
-            if observer in self._observers:
-                self._observers.remove(observer)
-                logger.debug(f"Removed cache observer: {type(observer).__name__}")
+            self._observers.discard(observer)
+            logger.debug(f"Removed cache observer: {type(observer).__name__}")
 
     def notify_observers(self, event: CacheEvent) -> None:
         """Notify all observers of a cache event."""
         with self._observers_lock:
-            for observer in self._observers:
+            # Create a copy of observers to avoid modification during iteration
+            observers_copy = list(self._observers)
+            for observer in observers_copy:
                 try:
                     observer.notify(event)
                 except Exception as e:

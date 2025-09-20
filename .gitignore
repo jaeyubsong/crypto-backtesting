@@ -36,17 +36,14 @@ env/
 
 # Project specific
 /data/
-!/data/binance/
-!/data/binance/futures/
-!/data/binance/futures/BTCUSDT/
-!/data/binance/futures/BTCUSDT/1h/
-!/data/binance/futures/BTCUSDT/1h/BTCUSDT_1h_2025-01-01.csv
-!/data/binance/futures/BTCUSDT/1h/BTCUSDT_1h_2025-01-02.csv
-!/data/binance/futures/BTCUSDT/1h/BTCUSDT_1h_2025-01-03.csv
 /results/
-*.csv
-*.json
 *.log
+
+# Exclude CSV files except in test fixtures
+*.csv
+!tests/fixtures/**/*.csv
+*.json
+!tests/fixtures/**/*.json
 
 # Testing
 .pytest_cache/
