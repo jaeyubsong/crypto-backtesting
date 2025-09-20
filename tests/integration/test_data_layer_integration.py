@@ -18,8 +18,8 @@ class TestDataLayerIntegration:
 
     @pytest.fixture
     def loader(self) -> CSVDataLoader:
-        """Create loader using real data directory."""
-        return CSVDataLoader(data_directory="data", cache_size=50)
+        """Create loader using test fixtures data directory."""
+        return CSVDataLoader(data_directory="tests/fixtures/data", cache_size=50)
 
     @pytest.fixture
     def processor(self) -> OHLCVDataProcessor:
