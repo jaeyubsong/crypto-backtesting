@@ -136,6 +136,7 @@ class TechnicalIndicatorsCalculator:
             "bollinger_bands": BollingerBandsStrategy(),
             "vwap": VWAPStrategy(),
         }
+        self._failure_counts: dict[str, int] = {}
 
     def add_strategy(self, name: str, strategy: IndicatorStrategy) -> None:
         """Add a new indicator calculation strategy."""
@@ -167,7 +168,10 @@ class TechnicalIndicatorsCalculator:
                 try:
                     result = strategy.calculate(result)
                 except (ValueError, TypeError, KeyError) as strategy_error:
-                    logger.warning(f"Failed to calculate {name} indicator: {strategy_error}")
+                    self._failure_counts[name] = self._failure_counts.get(name, 0) + 1
+                    logger.warning(
+                        f"Failed {name} (failure #{self._failure_counts[name]}): {strategy_error}"
+                    )
                     # Continue with other indicators instead of failing completely
                     continue
                 except Exception as unexpected_error:
@@ -225,6 +229,14 @@ class TechnicalIndicatorsCalculator:
     def get_available_indicators(self) -> list[str]:
         """Get list of available indicator strategies."""
         return list(self._strategies.keys())
+
+    def get_failure_statistics(self) -> dict[str, int]:
+        """Get failure counts for each indicator strategy."""
+        return self._failure_counts.copy()
+
+    def reset_failure_statistics(self) -> None:
+        """Reset failure counts for monitoring purposes."""
+        self._failure_counts.clear()
 
 
 # Factory function for easy instantiation

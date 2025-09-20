@@ -51,6 +51,11 @@ class MemoryTracker:
         with self._memory_lock:
             self._memory_usage_mb += memory_mb
 
+    def subtract_memory_usage(self, memory_mb: float) -> None:
+        """Subtract memory usage from tracker."""
+        with self._memory_lock:
+            self._memory_usage_mb = max(0.0, self._memory_usage_mb - memory_mb)
+
     def clear_memory_usage(self) -> float:
         """Clear all memory usage and return the amount that was cleared."""
         with self._memory_lock:

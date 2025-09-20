@@ -85,30 +85,42 @@ class CSVDataLoader(IDataLoader):
             DataError: If data cannot be loaded
         """
         try:
-            # Validate and sanitize input parameters
-            safe_params = self._validate_and_sanitize_params(
-                symbol, timeframe, start_date, end_date, trading_mode
-            )
-
-            # Generate and validate file paths
-            file_paths = self._generate_file_paths(*safe_params)
-            self._validate_file_paths_exist(file_paths, symbol, timeframe, start_date, end_date)
-
-            # Load data using appropriate strategy
-            return await self._execute_loading_strategy(
-                file_paths, start_date, end_date, symbol, timeframe
-            )
-
+            return await self._load_data_core(symbol, timeframe, start_date, end_date, trading_mode)
         except (ValidationError, DataError):
             raise
-        except FileNotFoundError as e:
-            logger.error(f"Required data files not found for {symbol} {timeframe}")
-            raise DataError(f"No data files found for {symbol} {timeframe}") from e
-        except PermissionError as e:
-            logger.error(f"Permission denied accessing data for {symbol} {timeframe}")
-            raise DataError(f"Permission denied accessing data for {symbol} {timeframe}") from e
         except Exception as e:
-            return self._handle_loading_error(e, symbol, timeframe)
+            return self._handle_data_loading_exceptions(e, symbol, timeframe)
+
+    async def _load_data_core(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: datetime,
+        end_date: datetime,
+        trading_mode: str,
+    ) -> pd.DataFrame:
+        """Core data loading logic with validation and execution."""
+        safe_params = self._validate_and_sanitize_params(
+            symbol, timeframe, start_date, end_date, trading_mode
+        )
+        file_paths = self._generate_file_paths(*safe_params)
+        self._validate_file_paths_exist(file_paths, symbol, timeframe, start_date, end_date)
+        return await self._execute_loading_strategy(
+            file_paths, start_date, end_date, symbol, timeframe
+        )
+
+    def _handle_data_loading_exceptions(
+        self, error: Exception, symbol: str, timeframe: str
+    ) -> pd.DataFrame:
+        """Handle specific data loading exceptions with appropriate error messages."""
+        if isinstance(error, FileNotFoundError):
+            logger.error(f"Required data files not found for {symbol} {timeframe}")
+            raise DataError(f"No data files found for {symbol} {timeframe}") from error
+        elif isinstance(error, PermissionError):
+            logger.error(f"Permission denied accessing data for {symbol} {timeframe}")
+            raise DataError(f"Permission denied accessing data for {symbol} {timeframe}") from error
+        else:
+            return self._handle_loading_error(error, symbol, timeframe)
 
     def _validate_and_sanitize_params(
         self,

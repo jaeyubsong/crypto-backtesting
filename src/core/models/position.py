@@ -161,6 +161,27 @@ class Position:
         )
 
     @classmethod
+    def _validate_short_position_creation(cls, trading_mode: TradingMode) -> None:
+        """Validate that short positions are allowed in the given trading mode."""
+        if trading_mode == TradingMode.SPOT:
+            raise ValidationError("Short positions not allowed in SPOT trading mode")
+
+    @classmethod
+    def _prepare_short_position_params(
+        cls,
+        size: float,
+        entry_price: float,
+        leverage: float,
+        trading_mode: TradingMode,
+        timestamp: datetime | None,
+    ) -> tuple[float, float, datetime]:
+        """Prepare parameters for short position creation."""
+        effective_timestamp = timestamp if timestamp is not None else datetime.now()
+        position_size = -abs(size)
+        margin_used = cls._calculate_margin_used(abs(size), entry_price, leverage, trading_mode)
+        return position_size, margin_used, effective_timestamp
+
+    @classmethod
     def create_short(
         cls,
         symbol: Symbol,
@@ -170,41 +191,18 @@ class Position:
         timestamp: datetime | None = None,
         trading_mode: TradingMode = TradingMode.FUTURES,
     ) -> "Position":
-        """Factory method to create a short position.
-
-        Args:
-            symbol: Trading symbol
-            size: Position size (will be made negative)
-            entry_price: Entry price for the position
-            leverage: Leverage multiplier (default 1.0)
-            timestamp: Position creation time (default now)
-            trading_mode: Trading mode for margin calculation
-
-        Returns:
-            New short Position instance
-
-        Raises:
-            ValidationError: If trying to create short position in SPOT mode
-        """
-        if timestamp is None:
-            timestamp = datetime.now()
-
-        # Validate short positions are allowed
-        if trading_mode == TradingMode.SPOT:
-            raise ValidationError("Short positions not allowed in SPOT trading mode")
-
-        # Ensure negative size for short position
-        position_size = -abs(size)
-
-        # Calculate margin used based on trading mode
-        margin_used = cls._calculate_margin_used(abs(size), entry_price, leverage, trading_mode)
+        """Factory method to create a short position."""
+        cls._validate_short_position_creation(trading_mode)
+        position_size, margin_used, effective_timestamp = cls._prepare_short_position_params(
+            size, entry_price, leverage, trading_mode, timestamp
+        )
 
         return cls(
             symbol=symbol,
             size=position_size,
             entry_price=entry_price,
             leverage=leverage,
-            timestamp=timestamp,
+            timestamp=effective_timestamp,
             position_type=PositionType.SHORT,
             margin_used=margin_used,
         )

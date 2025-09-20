@@ -48,6 +48,7 @@ class CSVCache(CacheSubject, ICacheManager):
         # Initialize components
         self._statistics = CacheStatistics()
         self._memory_tracker = MemoryTracker(memory_limit_mb=self.MAX_MEMORY_MB)
+        self._access_counts: dict[str, int] = {}  # Track access frequency for LFU eviction
 
         # Set up default observers if enabled
         if enable_observers:
@@ -105,6 +106,8 @@ class CSVCache(CacheSubject, ICacheManager):
         with self._cache_lock:
             if cache_key in self.cache:
                 self._statistics.record_hit()
+                # Track access frequency for LFU eviction
+                self._access_counts[cache_key] = self._access_counts.get(cache_key, 0) + 1
                 logger.debug(f"Cache hit for {file_path}")
                 # Notify observers of cache hit
                 self.notify_observers(
@@ -174,6 +177,7 @@ class CSVCache(CacheSubject, ICacheManager):
 
             # Now safe to add to cache
             self.cache[cache_key] = df.copy()
+            self._access_counts[cache_key] = 1  # Initialize access count
             self._memory_tracker.add_memory_usage(df_memory_mb)
 
             logger.debug(
@@ -215,7 +219,35 @@ class CSVCache(CacheSubject, ICacheManager):
     def _clear_cache_internal(self) -> None:
         """Internal cache clearing without additional locking."""
         self.cache.clear()
+        self._access_counts.clear()
         self._memory_tracker.clear_memory_usage()
+
+    def _evict_lfu_items(self, target_memory_mb: float) -> None:
+        """Evict least frequently used items to reach target memory usage."""
+        # Sort items by access count (ascending = least frequently used first)
+        sorted_items = sorted(self._access_counts.items(), key=lambda x: x[1])
+
+        current_memory = self._memory_tracker.get_memory_usage()
+        for cache_key, _ in sorted_items:
+            if current_memory <= target_memory_mb or not self.cache:
+                break
+
+            if cache_key in self.cache:
+                # Remove item and update memory tracking
+                df = self.cache.pop(cache_key)
+                self._access_counts.pop(cache_key, None)
+                df_memory = self._memory_tracker.estimate_dataframe_memory(df)
+                self._memory_tracker.subtract_memory_usage(df_memory)
+                current_memory -= df_memory
+
+                logger.debug(f"LFU evicted cache key: {cache_key}")
+                self.notify_observers(
+                    CacheEvent(
+                        CacheEventType.CACHE_EVICTION,
+                        cache_key,
+                        {"reason": "LFU", "memory_freed_mb": df_memory},
+                    )
+                )
 
     # ICacheManager interface implementation
     async def get(self, key: str) -> pd.DataFrame | None:
