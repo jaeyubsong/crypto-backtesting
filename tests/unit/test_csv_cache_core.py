@@ -390,9 +390,16 @@ class TestCSVCacheCoreDirectly:
         assert isinstance(initial_usage, float)
         assert initial_usage >= 0
 
-        # Test setter (for compatibility)
-        core_cache._memory_usage_mb = 5.0
+        # Test controlled setter (for testing)
+        core_cache._set_memory_usage_for_testing(5.0)
         assert core_cache._memory_tracker._memory_usage_mb == 5.0
+
+        # Test validation in setter
+        with pytest.raises(ValueError, match="Memory usage cannot be negative"):
+            core_cache._set_memory_usage_for_testing(-1.0)
+
+        with pytest.raises(ValueError, match="exceeds reasonable limit"):
+            core_cache._set_memory_usage_for_testing(10000.0)  # Very large value
 
     def test_core_queue_and_flush_events(self, core_cache: CSVCacheCore) -> None:
         """Test event queuing and flushing system."""

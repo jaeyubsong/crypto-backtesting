@@ -31,6 +31,7 @@ class CSVCacheCore(CacheSubject, ICacheManager):
     # Configuration constants
     DEFAULT_CACHE_SIZE = 100
     MAX_MEMORY_MB = 512  # Maximum cache memory usage in MB
+    MAX_CACHE_CLEAR_RETRIES = 3  # Maximum retries for cache clearing to prevent infinite loops
 
     def __init__(self, cache_size: int = DEFAULT_CACHE_SIZE, enable_observers: bool = True):
         """Initialize the CSV cache core with observer pattern support."""
@@ -53,8 +54,9 @@ class CSVCacheCore(CacheSubject, ICacheManager):
         self._memory_tracker = MemoryTracker(memory_limit_mb=self.MAX_MEMORY_MB)
         self._access_counts: dict[str, int] = {}  # Track access frequency for LFU eviction
 
-        # Deferred notification system for performance optimization
+        # Deferred notification system for performance optimization (thread-safe)
         self._pending_events: list[CacheEvent] = []
+        self._events_lock = RLock()  # Separate lock for event queue thread safety
 
         # Set up default observers if enabled
         if enable_observers:
@@ -66,24 +68,39 @@ class CSVCacheCore(CacheSubject, ICacheManager):
         """Backward compatibility accessor for memory usage."""
         return self._memory_tracker.get_memory_usage()
 
-    @_memory_usage_mb.setter
-    def _memory_usage_mb(self, value: float) -> None:
-        """Backward compatibility setter for memory usage (for testing)."""
-        # This is primarily for test compatibility
-        # Direct manipulation should be avoided in production code
+    def _set_memory_usage_for_testing(self, value: float) -> None:
+        """Controlled setter for memory usage (for testing only).
+
+        This method provides a safe way to set memory usage for testing purposes
+        with proper validation and bounds checking.
+        """
+        if value < 0:
+            raise ValueError("Memory usage cannot be negative")
+        if value > self.MAX_MEMORY_MB * 1.5:  # Allow moderate headroom for testing edge cases
+            raise ValueError(
+                f"Memory usage {value:.1f}MB exceeds reasonable limit ({self.MAX_MEMORY_MB * 1.5:.1f}MB)"
+            )
+
+        # Use the memory tracker's internal method with validation
         self._memory_tracker._memory_usage_mb = value
 
     def _queue_event(self, event: CacheEvent) -> None:
-        """Queue an event for deferred notification outside of locks."""
-        self._pending_events.append(event)
+        """Queue an event for deferred notification (thread-safe)."""
+        with self._events_lock:
+            self._pending_events.append(event)
 
     def _flush_pending_events(self) -> None:
-        """Notify observers of all pending events and clear the queue."""
-        if self._pending_events:
+        """Notify observers of all pending events and clear the queue (thread-safe)."""
+        # Atomically extract all pending events to prevent race conditions
+        with self._events_lock:
+            if not self._pending_events:
+                return
             events_to_notify = self._pending_events[:]
             self._pending_events.clear()
-            for event in events_to_notify:
-                self.notify_observers(event)
+
+        # Notify observers outside of lock to prevent deadlocks
+        for event in events_to_notify:
+            self.notify_observers(event)
 
     def _build_cache_key(self, file_path_or_components: Path | dict[str, Any]) -> str:
         """Build cache key from file path or components including file modification time."""
@@ -179,17 +196,27 @@ class CSVCacheCore(CacheSubject, ICacheManager):
         return df_memory_mb
 
     def _ensure_cache_space(self, df: pd.DataFrame, _df_memory_mb: float) -> None:
-        """Clear cache if needed to make room for new DataFrame."""
+        """Clear cache if needed to make room for new DataFrame with retry limits."""
         can_add, _ = self._memory_tracker.check_memory_before_add(df)
+        retries = 0
 
-        while not can_add:
+        while not can_add and retries < self.MAX_CACHE_CLEAR_RETRIES:
             if not self.cache:  # No more items to remove
                 raise MemoryError("Cannot fit data in cache even after clearing")
+
             logger.warning(
-                f"Cache memory limit approached ({self._memory_tracker.get_memory_usage():.1f}MB), clearing cache"
+                f"Cache memory limit approached ({self._memory_tracker.get_memory_usage():.1f}MB), "
+                f"clearing cache (attempt {retries + 1}/{self.MAX_CACHE_CLEAR_RETRIES})"
             )
             self._clear_cache_internal()
             can_add, _ = self._memory_tracker.check_memory_before_add(df)
+            retries += 1
+
+        if not can_add:
+            raise MemoryError(
+                f"Cannot fit data in cache after {self.MAX_CACHE_CLEAR_RETRIES} clearing attempts. "
+                f"DataFrame size ({_df_memory_mb:.1f}MB) may exceed memory limit ({self.MAX_MEMORY_MB}MB)"
+            )
 
     def _store_in_cache(
         self, df: pd.DataFrame, cache_key: str, df_memory_mb: float, metadata: dict[str, Any]
@@ -285,19 +312,30 @@ class CSVCacheCore(CacheSubject, ICacheManager):
         can_add, df_memory_mb = self._memory_tracker.check_memory_before_add(value)
 
         with self._cache_lock:
-            # Clear cache if needed to make room
-            while not can_add:
+            # Clear cache if needed to make room (with retry limits)
+            retries = 0
+            while not can_add and retries < self.MAX_CACHE_CLEAR_RETRIES:
                 if not self.cache:  # No more items to remove
                     raise MemoryError("Cannot fit data in cache even after clearing")
                 self._queue_event(
                     CacheEvent(
                         CacheEventType.MEMORY_WARNING,
                         key,
-                        {"memory_usage_percent": self._memory_tracker.get_memory_usage_percent()},
+                        {
+                            "memory_usage_percent": self._memory_tracker.get_memory_usage_percent(),
+                            "retry_attempt": retries + 1,
+                            "max_retries": self.MAX_CACHE_CLEAR_RETRIES,
+                        },
                     )
                 )
                 self._clear_cache_internal()
                 can_add, df_memory_mb = self._memory_tracker.check_memory_before_add(value)
+                retries += 1
+
+            if not can_add:
+                raise MemoryError(
+                    f"Cannot fit data in cache after {self.MAX_CACHE_CLEAR_RETRIES} clearing attempts"
+                )
 
             self.cache[key] = value.copy()
             self._memory_tracker.add_memory_usage(df_memory_mb)

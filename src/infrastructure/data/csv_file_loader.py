@@ -47,7 +47,25 @@ class CSVFileLoader:
         except OSError as e:
             logger.error(f"File system error loading {file_path.name}: {str(e)}")
             raise DataError(f"File system error loading {file_path.name}") from e
+        except (pd.errors.ParserError, ValueError, TypeError) as e:
+            # Handle specific CSV parsing errors
+            logger.error(f"CSV parsing error ({type(e).__name__}) in {file_path.name}: {str(e)}")
+            return self._handle_loading_error(e, file_path)
+        except (UnicodeDecodeError, MemoryError) as e:
+            # Handle encoding and memory issues
+            logger.error(
+                f"Encoding or memory error ({type(e).__name__}) loading {file_path.name}: {str(e)}"
+            )
+            return self._handle_loading_error(e, file_path)
         except Exception as e:
+            # Only catch truly unexpected exceptions
+            error_msg = (
+                str(e).replace("{", "{{").replace("}", "}}")
+            )  # Escape braces for safe logging
+            logger.error(
+                f"Unexpected error ({type(e).__name__}) loading {file_path.name}: {error_msg}",
+                exc_info=True,
+            )
             return self._handle_loading_error(e, file_path)
 
     async def _load_csv_from_disk(self, file_path: Path) -> pd.DataFrame:
