@@ -58,12 +58,12 @@ class CSVFileLoader:
             )
             return self._handle_loading_error(e, file_path)
         except Exception as e:
-            # Only catch truly unexpected exceptions
-            error_msg = (
-                str(e).replace("{", "{{").replace("}", "}}")
-            )  # Escape braces for safe logging
+            # Only catch truly unexpected exceptions - use structured logging to avoid brace escaping
             logger.error(
-                f"Unexpected error ({type(e).__name__}) loading {file_path.name}: {error_msg}",
+                "Unexpected error loading CSV file",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                file_name=file_path.name,
                 exc_info=True,
             )
             return self._handle_loading_error(e, file_path)

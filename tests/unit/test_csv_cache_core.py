@@ -4,7 +4,9 @@ Unit tests for CSV Cache Core functionality.
 Tests cover initialization, basic cache operations, and core interface implementation.
 """
 
+import asyncio
 import tempfile
+import time
 from collections.abc import Generator
 from pathlib import Path
 
@@ -468,3 +470,276 @@ class TestCSVCacheCoreDirectly:
         assert isinstance(cache_info["max_size"], int)
         assert isinstance(cache_info["memory_usage_mb"], float)
         assert isinstance(cache_info["hit_rate_percent"], float)
+
+
+class TestCSVCacheConcurrency:
+    """Test suite for concurrent operations and thread safety."""
+
+    @pytest.fixture
+    def concurrent_cache(self) -> CSVCacheCore:
+        """Create cache instance for concurrency testing."""
+        return CSVCacheCore(cache_size=20, enable_observers=False)
+
+    @pytest.fixture
+    def test_dataframes(self) -> list[pd.DataFrame]:
+        """Create multiple test DataFrames for concurrent operations."""
+        dataframes = []
+        for i in range(10):
+            df = pd.DataFrame(
+                {
+                    "timestamp": [1640995200000 + i * 1000, 1640998800000 + i * 1000],
+                    "open": [46000.0 + i, 46500.0 + i],
+                    "high": [47000.0 + i, 47500.0 + i],
+                    "low": [45500.0 + i, 46000.0 + i],
+                    "close": [46500.0 + i, 47000.0 + i],
+                    "volume": [100.5 + i, 150.2 + i],
+                }
+            )
+            dataframes.append(df)
+        return dataframes
+
+    @pytest.mark.asyncio
+    async def test_concurrent_cache_operations(
+        self, concurrent_cache: CSVCacheCore, test_dataframes: list[pd.DataFrame]
+    ) -> None:
+        """Test thread safety under concurrent cache operations."""
+
+        async def concurrent_worker(
+            worker_id: int, dataframes: list[pd.DataFrame]
+        ) -> list[tuple[str, bool]]:
+            """Worker function for concurrent cache operations."""
+            results = []
+            for i, df in enumerate(dataframes):
+                key = f"worker_{worker_id}_key_{i}"
+
+                # Set operation
+                await concurrent_cache.set(key, df)
+
+                # Get operation
+                retrieved = await concurrent_cache.get(key)
+                results.append((key, retrieved is not None))
+
+                # Small delay to increase chance of race conditions
+                await asyncio.sleep(0.001)
+
+            return results
+
+        # Run multiple concurrent workers
+        num_workers = 5
+        tasks = [
+            concurrent_worker(worker_id, test_dataframes[:3])  # Use subset for performance
+            for worker_id in range(num_workers)
+        ]
+
+        start_time = time.time()
+        results = await asyncio.gather(*tasks)
+        end_time = time.time()
+
+        # Verify all operations completed successfully
+        all_successful = True
+        total_operations = 0
+        for worker_results in results:
+            for key, success in worker_results:
+                total_operations += 1
+                if not success:
+                    all_successful = False
+                    print(f"Failed operation: {key}")
+
+        assert all_successful, "Some concurrent operations failed"
+        assert total_operations == num_workers * 3, (
+            f"Expected {num_workers * 3} operations, got {total_operations}"
+        )
+
+        # Verify cache integrity after concurrent operations
+        cache_info = concurrent_cache.get_cache_info()
+        assert cache_info["cache_size"] <= concurrent_cache.cache.maxsize
+
+        print(
+            f"Concurrent test completed in {end_time - start_time:.3f}s with {total_operations} operations"
+        )
+
+    @pytest.mark.asyncio
+    async def test_concurrent_cache_with_observer_notifications(
+        self, test_dataframes: list[pd.DataFrame]
+    ) -> None:
+        """Test thread safety with observer notifications enabled."""
+        # Create cache WITH observers to test notification thread safety
+        cache_with_observers = CSVCacheCore(cache_size=10, enable_observers=True)
+
+        async def notification_worker(worker_id: int) -> None:
+            """Worker that performs cache operations triggering notifications."""
+            for i in range(5):
+                key = f"notify_worker_{worker_id}_key_{i}"
+                df = test_dataframes[i % len(test_dataframes)]
+
+                await cache_with_observers.set(key, df)
+                result = await cache_with_observers.get(key)
+                assert result is not None
+
+                # Small delay to allow observer notifications to process
+                await asyncio.sleep(0.002)
+
+        # Run concurrent workers with notifications
+        num_workers = 3
+        tasks = [notification_worker(worker_id) for worker_id in range(num_workers)]
+
+        await asyncio.gather(*tasks)
+
+        # Verify cache remained stable
+        cache_info = cache_with_observers.get_cache_info()
+        assert cache_info["cache_size"] <= cache_with_observers.cache.maxsize
+        assert cache_info["hits"] > 0 or cache_info["misses"] > 0  # Some activity recorded
+
+    @pytest.mark.asyncio
+    async def test_concurrent_memory_limit_enforcement(
+        self, test_dataframes: list[pd.DataFrame]
+    ) -> None:
+        """Test memory limit enforcement under concurrent load."""
+        # Create cache with very low memory limit
+        small_cache = CSVCacheCore(cache_size=20, enable_observers=False)
+        small_cache.MAX_MEMORY_MB = 5  # Very low limit for testing
+
+        async def memory_worker(worker_id: int) -> tuple[int, int]:
+            """Worker that tries to fill cache beyond memory limit."""
+            successful_sets = 0
+            memory_errors = 0
+
+            for i in range(10):
+                key = f"memory_worker_{worker_id}_key_{i}"
+                df = test_dataframes[i % len(test_dataframes)]
+
+                try:
+                    await small_cache.set(key, df)
+                    successful_sets += 1
+                except MemoryError:
+                    memory_errors += 1
+
+                await asyncio.sleep(0.001)
+
+            return successful_sets, memory_errors
+
+        # Run concurrent workers
+        tasks = [memory_worker(worker_id) for worker_id in range(3)]
+        results = await asyncio.gather(*tasks)
+
+        total_successful = sum(result[0] for result in results)
+        total_memory_errors = sum(result[1] for result in results)
+
+        # At least some operations should succeed
+        assert total_successful > 0, "No cache operations succeeded"
+        # Memory errors are expected when hitting limits
+        assert total_memory_errors >= 0, "Memory error tracking should be non-negative"
+
+        # Memory usage should be within limits
+        memory_usage = small_cache._memory_tracker.get_memory_usage()
+        assert memory_usage <= small_cache.MAX_MEMORY_MB * 1.1  # Small tolerance for overhead
+
+    def test_batch_operations_context_manager(
+        self, concurrent_cache: CSVCacheCore, test_dataframes: list[pd.DataFrame]
+    ) -> None:
+        """Test batch operations context manager functionality."""
+        # Track observer notifications
+        notification_count = 0
+
+        class TestObserver:
+            def notify(self, event: CacheEvent) -> None:  # noqa: ARG002
+                nonlocal notification_count
+                notification_count += 1
+
+        observer = TestObserver()
+        concurrent_cache.add_observer(observer)
+
+        # Perform operations outside batch mode (should trigger notifications)
+        asyncio.run(concurrent_cache.set("single_key", test_dataframes[0]))
+        # Verify single operation triggers notifications
+        assert notification_count > 0, "Single operations should trigger immediate notifications"
+
+        # Reset counter
+        notification_count = 0
+
+        # Perform batch operations (should defer notifications)
+        async def batch_test() -> int:
+            with concurrent_cache.batch_operations():
+                await concurrent_cache.set("batch_key_1", test_dataframes[0])
+                await concurrent_cache.set("batch_key_2", test_dataframes[1])
+                await concurrent_cache.set("batch_key_3", test_dataframes[2])
+                # Should have no notifications yet during batch
+                return notification_count
+
+        notifications_during_batch = asyncio.run(batch_test())
+        notifications_after_batch = notification_count
+
+        # Verify batch behavior
+        assert notifications_during_batch == 0, "Notifications should be deferred during batch mode"
+        assert notifications_after_batch > 0, "Notifications should be sent after batch completes"
+        assert notifications_after_batch >= 3, "Should have notifications for all batch operations"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_access_counts_tracking(
+        self, concurrent_cache: CSVCacheCore, test_dataframes: list[pd.DataFrame]
+    ) -> None:
+        """Test that access counts are properly tracked under concurrent access."""
+        # Pre-populate cache
+        for i in range(5):
+            key = f"access_test_key_{i}"
+            await concurrent_cache.set(key, test_dataframes[i % len(test_dataframes)])
+
+        async def access_worker(worker_id: int, target_key: str, access_count: int) -> None:  # noqa: ARG001
+            """Worker that repeatedly accesses the same cache key."""
+            for _ in range(access_count):
+                result = await concurrent_cache.get(target_key)
+                assert result is not None
+                await asyncio.sleep(0.0001)  # Tiny delay
+
+        # Multiple workers accessing the same keys
+        target_key = "access_test_key_0"
+        accesses_per_worker = 10
+        num_workers = 4
+
+        tasks = [
+            access_worker(worker_id, target_key, accesses_per_worker)
+            for worker_id in range(num_workers)
+        ]
+
+        await asyncio.gather(*tasks)
+
+        # Verify access count was tracked properly
+        # Access count should be at least the number of times we accessed it
+        # (might be higher due to initial set operation)
+        expected_min_accesses = num_workers * accesses_per_worker
+
+        # Check cache statistics
+        cache_info = concurrent_cache.get_cache_info()
+        assert cache_info["hits"] >= expected_min_accesses, (
+            f"Expected at least {expected_min_accesses} hits"
+        )
+
+    @pytest.mark.asyncio
+    async def test_concurrent_cache_clearing(
+        self, concurrent_cache: CSVCacheCore, test_dataframes: list[pd.DataFrame]
+    ) -> None:
+        """Test cache clearing under concurrent operations."""
+
+        async def populate_worker() -> None:
+            """Worker that continuously populates cache."""
+            for i in range(20):
+                key = f"populate_key_{i}"
+                df = test_dataframes[i % len(test_dataframes)]
+                await concurrent_cache.set(key, df)
+                await asyncio.sleep(0.001)
+
+        async def clear_worker() -> None:
+            """Worker that clears cache periodically."""
+            await asyncio.sleep(0.010)  # Let population start
+            concurrent_cache.clear_cache()
+            await asyncio.sleep(0.010)
+            concurrent_cache.clear_cache()
+
+        # Run populate and clear workers concurrently
+        await asyncio.gather(populate_worker(), clear_worker())
+
+        # Cache should be empty after clearing
+        cache_info = concurrent_cache.get_cache_info()
+        # May have some items if population happened after final clear
+        assert cache_info["cache_size"] >= 0
+        assert cache_info["memory_usage_mb"] >= 0

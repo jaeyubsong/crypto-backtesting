@@ -5,7 +5,8 @@ This module provides the core caching infrastructure for CSV data
 with memory management and observer pattern support.
 """
 
-import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -52,16 +53,44 @@ class CSVCacheCore(CacheSubject, ICacheManager):
         # Initialize components
         self._statistics = CacheStatistics()
         self._memory_tracker = MemoryTracker(memory_limit_mb=self.MAX_MEMORY_MB)
-        self._access_counts: dict[str, int] = {}  # Track access frequency for LFU eviction
+        # Use bounded LRUCache to prevent memory leaks from unlimited dict growth
+        self._access_counts: LRUCache[str, int] = LRUCache(maxsize=cache_size * 2)
 
         # Deferred notification system for performance optimization (thread-safe)
         self._pending_events: list[CacheEvent] = []
         self._events_lock = RLock()  # Separate lock for event queue thread safety
+        self._batch_mode = False  # Flag to control immediate vs deferred notifications
 
         # Set up default observers if enabled
         if enable_observers:
             for observer in create_standard_cache_observers():
                 self.add_observer(observer)
+
+    @contextmanager
+    def batch_operations(self) -> Generator["CSVCacheCore"]:
+        """Context manager for efficient batch cache operations.
+
+        During batch mode, observer notifications are deferred until the context exits,
+        improving performance for bulk operations while maintaining event delivery.
+
+        Example:
+            with cache.batch_operations():
+                for file_path in files:
+                    await cache.set(key, data)  # No immediate notifications
+            # All notifications sent here
+        """
+        with self._events_lock:
+            old_batch_mode = self._batch_mode
+            self._batch_mode = True
+
+        try:
+            yield self
+        finally:
+            with self._events_lock:
+                self._batch_mode = old_batch_mode
+                if not self._batch_mode:
+                    # Flush all pending events when exiting batch mode
+                    self._flush_pending_events()
 
     @property
     def _memory_usage_mb(self) -> float:
@@ -72,17 +101,10 @@ class CSVCacheCore(CacheSubject, ICacheManager):
         """Controlled setter for memory usage (for testing only).
 
         This method provides a safe way to set memory usage for testing purposes
-        with proper validation and bounds checking.
+        with proper validation, bounds checking, and thread safety.
         """
-        if value < 0:
-            raise ValueError("Memory usage cannot be negative")
-        if value > self.MAX_MEMORY_MB * 1.5:  # Allow moderate headroom for testing edge cases
-            raise ValueError(
-                f"Memory usage {value:.1f}MB exceeds reasonable limit ({self.MAX_MEMORY_MB * 1.5:.1f}MB)"
-            )
-
-        # Use the memory tracker's internal method with validation
-        self._memory_tracker._memory_usage_mb = value
+        # Delegate to memory tracker's thread-safe method
+        self._memory_tracker.set_memory_usage_for_testing(value)
 
     def _queue_event(self, event: CacheEvent) -> None:
         """Queue an event for deferred notification (thread-safe)."""
@@ -90,10 +112,13 @@ class CSVCacheCore(CacheSubject, ICacheManager):
             self._pending_events.append(event)
 
     def _flush_pending_events(self) -> None:
-        """Notify observers of all pending events and clear the queue (thread-safe)."""
-        # Atomically extract all pending events to prevent race conditions
+        """Notify observers of all pending events and clear the queue (thread-safe).
+
+        Respects batch mode - if in batch mode, events remain queued.
+        """
+        # Don't flush events if we're in batch mode
         with self._events_lock:
-            if not self._pending_events:
+            if self._batch_mode or not self._pending_events:
                 return
             events_to_notify = self._pending_events[:]
             self._pending_events.clear()
@@ -117,23 +142,24 @@ class CSVCacheCore(CacheSubject, ICacheManager):
             return str(file_path) if file_path else "unknown"
 
     def _get_cached_file_mtime(self, file_path: Path) -> int:
-        """Get file modification time with caching to reduce I/O operations."""
+        """Get file modification time with aggressive caching to minimize I/O operations."""
         file_str = str(file_path)
 
         with self._stat_cache_lock:
-            # Check if we have a cached mtime
+            # Check if we have a cached mtime (TTLCache automatically handles expiration)
             if file_str in self._file_stat_cache:
                 return int(self._file_stat_cache[file_str])
 
-            # Cache miss - get actual file mtime
+            # Cache miss - perform I/O operation only when necessary
             try:
                 stat = file_path.stat()
                 mtime = stat.st_mtime_ns
                 self._file_stat_cache[file_str] = float(mtime)
                 return mtime
             except OSError:
-                # File might not exist or be accessible
-                default_mtime = int(time.time() * 1_000_000_000)  # Current time in nanoseconds
+                # File might not exist or be accessible - use deterministic fallback
+                # instead of current time to avoid cache invalidation
+                default_mtime = hash(file_str) % (2**32)  # Deterministic hash-based fallback
                 self._file_stat_cache[file_str] = float(default_mtime)
                 return default_mtime
 
@@ -258,7 +284,7 @@ class CSVCacheCore(CacheSubject, ICacheManager):
     def _clear_cache_internal(self) -> None:
         """Internal cache clearing without additional locking."""
         self.cache.clear()
-        self._access_counts.clear()
+        self._access_counts.clear()  # LRUCache.clear() is still available and thread-safe
         self._memory_tracker.clear_memory_usage()
 
     def _evict_lfu_items(self, target_memory_mb: float) -> None:

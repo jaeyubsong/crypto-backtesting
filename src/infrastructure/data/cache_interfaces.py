@@ -103,15 +103,29 @@ class CacheSubject:
             logger.debug(f"Removed cache observer: {type(observer).__name__}")
 
     def notify_observers(self, event: CacheEvent) -> None:
-        """Notify all observers of a cache event."""
+        """Notify all observers of a cache event asynchronously to prevent deadlocks.
+
+        This method uses a separate thread for notifications to avoid deadlock scenarios
+        where observers might call back into the cache while locks are held.
+        """
+        import threading
+
+        # Get observers copy without holding lock for long
+        observers_copy = []
         with self._observers_lock:
-            # Create a copy of observers to avoid modification during iteration
             observers_copy = list(self._observers)
+
+        # Notify observers asynchronously to prevent deadlocks
+        def _notify_async() -> None:
             for observer in observers_copy:
                 try:
                     observer.notify(event)
                 except Exception as e:
                     logger.error(f"Observer notification failed: {e}")
+
+        # Use daemon thread to prevent hanging on shutdown
+        notification_thread = threading.Thread(target=_notify_async, daemon=True)
+        notification_thread.start()
 
 
 class CacheMetricsObserver:

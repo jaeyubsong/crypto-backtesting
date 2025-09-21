@@ -42,7 +42,7 @@ class CSVCache(CacheSubject, ICacheManager):
         if cache_size > 1000:
             logger.warning(f"Large cache size ({cache_size}) may consume significant memory")
 
-        self.cache: LRUCache = LRUCache(maxsize=cache_size)
+        self.cache: LRUCache[str, pd.DataFrame] = LRUCache(maxsize=cache_size)
         self._cache_lock = RLock()  # Thread-safe cache access
 
         # Initialize components

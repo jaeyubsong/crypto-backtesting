@@ -73,6 +73,29 @@ class MemoryTracker:
         with self._memory_lock:
             return (self._memory_usage_mb / self.memory_limit_mb) * 100
 
+    def set_memory_usage_for_testing(self, value: float) -> None:
+        """
+        Controlled setter for memory usage (for testing only).
+
+        This method provides a safe way to set memory usage for testing purposes
+        with proper validation, bounds checking, and thread safety.
+
+        Args:
+            value: Memory usage value in MB
+
+        Raises:
+            ValueError: If value is invalid or exceeds reasonable limits
+        """
+        if value < 0:
+            raise ValueError("Memory usage cannot be negative")
+        if value > self.memory_limit_mb * 1.5:  # Allow moderate headroom for testing
+            raise ValueError(
+                f"Memory usage {value:.1f}MB exceeds reasonable limit ({self.memory_limit_mb * 1.5:.1f}MB)"
+            )
+
+        with self._memory_lock:
+            self._memory_usage_mb = value
+
     def recalculate_memory_from_cache(
         self, cache_values: list[pd.DataFrame], observer: CacheSubject | None = None
     ) -> float:
