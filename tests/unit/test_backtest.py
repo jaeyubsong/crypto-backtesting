@@ -9,7 +9,7 @@ import pytest
 
 from src.core.enums import ActionType, PositionType, Symbol, Timeframe, TradingMode
 from src.core.models.backtest import BacktestConfig, BacktestResults
-from src.core.models.position import Trade
+from src.core.models.trade import Trade
 
 
 class TestBacktestConfig:

@@ -10,7 +10,8 @@ from src.core.constants import (
 )
 from src.core.enums import ActionType, PositionType, Symbol
 from src.core.exceptions.backtest import InsufficientFundsError, ValidationError
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
+from src.core.models.trade import Trade
 from src.core.utils.validation import validate_positive, validate_symbol
 
 

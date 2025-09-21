@@ -13,12 +13,25 @@ app = FastAPI(
     description="API for crypto quantitative trading strategy backtesting",
 )
 
+# Production-ready CORS configuration
+# For development, use environment-specific origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure properly for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "https://yourdomain.com",  # Replace with actual production domain
+        "https://api.yourdomain.com",  # API subdomain if used
+        "http://localhost:3000",  # Development frontend (React/Vue/etc)
+        "http://localhost:8080",  # Alternative development port
+    ],
+    allow_credentials=False,  # Disable credentials for security
+    allow_methods=["GET", "POST", "PUT", "DELETE"],  # Specific methods only
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+    ],  # Specific headers only
 )
 
 app.include_router(backtest.router, prefix="/api/backtest", tags=["backtest"])

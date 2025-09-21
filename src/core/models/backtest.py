@@ -8,7 +8,7 @@ from datetime import datetime
 
 from src.core.enums import Symbol, Timeframe, TradingMode
 
-from .position import Trade
+from .trade import Trade
 
 
 @dataclass

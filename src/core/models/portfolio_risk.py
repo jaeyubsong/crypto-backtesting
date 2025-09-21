@@ -17,6 +17,7 @@ from .portfolio_helpers import PortfolioValidator
 
 if TYPE_CHECKING:
     from .portfolio_core import PortfolioCore
+    from .position import Position
 
 
 class PortfolioRisk:
@@ -96,6 +97,18 @@ class PortfolioRisk:
 
         return realized_pnl
 
+    def _execute_partial_close(
+        self, position: "Position", current_price: float, percentage_decimal: float, fee: float
+    ) -> None:
+        """Execute partial closure of a position."""
+        partial_pnl = position.unrealized_pnl(current_price) * percentage_decimal - fee
+        partial_margin = to_float(position.margin_used) * percentage_decimal
+
+        remaining_percentage = float("1") - percentage_decimal
+        position.size = to_float(position.size) * remaining_percentage
+        position.margin_used = to_float(position.margin_used) * remaining_percentage
+        self.core.cash = to_float(self.core.cash) + partial_margin + partial_pnl
+
     def close_position(
         self, symbol: Symbol, current_price: float, percentage: float = float("100.0")
     ) -> bool:
@@ -109,12 +122,9 @@ class PortfolioRisk:
         Returns:
             True if position was closed successfully
         """
-        # Validate inputs using centralized validator
-        symbol = validate_symbol(symbol)
-
-        # Validate percentage is in valid range (must be > 0 and <= 100)
         from src.core.utils.validation import validate_percentage
 
+        symbol = validate_symbol(symbol)
         percentage = validate_percentage(percentage, "percentage")
 
         if symbol not in self.core.positions:
@@ -123,21 +133,12 @@ class PortfolioRisk:
         position = self.core.positions[symbol]
         position_size = to_float(position.size)
         close_amount = position_size * (percentage / float("100.0"))
-
         fee = close_amount * current_price * to_float(DEFAULT_TAKER_FEE)
 
         if percentage >= float("100"):
-            # Full close
             self.close_position_at_price(symbol, current_price, fee)
         else:
-            # Partial close
             percentage_decimal = percentage / float("100.0")
-            partial_pnl = position.unrealized_pnl(current_price) * percentage_decimal - fee
-            partial_margin = to_float(position.margin_used) * percentage_decimal
-
-            remaining_percentage = float("1") - percentage_decimal
-            position.size = to_float(position.size) * remaining_percentage
-            position.margin_used = to_float(position.margin_used) * remaining_percentage
-            self.core.cash = to_float(self.core.cash) + partial_margin + partial_pnl
+            self._execute_partial_close(position, current_price, percentage_decimal, fee)
 
         return True

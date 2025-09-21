@@ -35,11 +35,15 @@ env/
 .DS_Store
 
 # Project specific
-data/
-results/
-*.csv
-*.json
+/data/
+/results/
 *.log
+
+# Exclude CSV files except in test fixtures
+*.csv
+!tests/fixtures/**/*.csv
+*.json
+!tests/fixtures/**/*.json
 
 # Testing
 .pytest_cache/

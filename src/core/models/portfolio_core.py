@@ -17,7 +17,8 @@ from src.core.constants import (
     PORTFOLIO_HISTORY_TRIM_TO,
 )
 from src.core.enums import Symbol, TradingMode
-from src.core.models.position import Position, Trade
+from src.core.models.position import Position
+from src.core.models.trade import Trade
 
 # to_float import removed - no longer needed for float-to-float conversions
 from .portfolio_helpers import PortfolioValidator

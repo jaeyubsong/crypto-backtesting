@@ -5,9 +5,13 @@ Optimized for high-performance backtesting with float operations.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from src.core.enums import ActionType, PositionType, Symbol, TradingMode
 from src.core.exceptions.backtest import ValidationError
+
+if TYPE_CHECKING:
+    from src.core.models.trade import Trade
 from src.core.types.financial import (
     ZERO,
     calculate_pnl,
@@ -86,11 +90,8 @@ class Position:
         # Calculate unrealized PnL (already validated in calculate_pnl)
         unrealized_pnl = self.unrealized_pnl(current_price_rounded)
 
-        # Position value at entry (validate since this is a new calculation)
+        # Position value at entry (size and entry_price already validated at construction)
         position_value = abs(self.size) * self.entry_price
-        from src.core.types.financial import validate_safe_float_range
-
-        validate_safe_float_range(position_value, "position_value in liquidation check")
 
         # Maintenance margin requirement
         maintenance_margin = round_amount(position_value * margin_rate)
@@ -157,6 +158,27 @@ class Position:
         )
 
     @classmethod
+    def _validate_short_position_creation(cls, trading_mode: TradingMode) -> None:
+        """Validate that short positions are allowed in the given trading mode."""
+        if trading_mode == TradingMode.SPOT:
+            raise ValidationError("Short positions not allowed in SPOT trading mode")
+
+    @classmethod
+    def _prepare_short_position_params(
+        cls,
+        size: float,
+        entry_price: float,
+        leverage: float,
+        trading_mode: TradingMode,
+        timestamp: datetime | None,
+    ) -> tuple[float, float, datetime]:
+        """Prepare parameters for short position creation."""
+        effective_timestamp = timestamp if timestamp is not None else datetime.now()
+        position_size = -abs(size)
+        margin_used = cls._calculate_margin_used(abs(size), entry_price, leverage, trading_mode)
+        return position_size, margin_used, effective_timestamp
+
+    @classmethod
     def create_short(
         cls,
         symbol: Symbol,
@@ -166,41 +188,18 @@ class Position:
         timestamp: datetime | None = None,
         trading_mode: TradingMode = TradingMode.FUTURES,
     ) -> "Position":
-        """Factory method to create a short position.
-
-        Args:
-            symbol: Trading symbol
-            size: Position size (will be made negative)
-            entry_price: Entry price for the position
-            leverage: Leverage multiplier (default 1.0)
-            timestamp: Position creation time (default now)
-            trading_mode: Trading mode for margin calculation
-
-        Returns:
-            New short Position instance
-
-        Raises:
-            ValidationError: If trying to create short position in SPOT mode
-        """
-        if timestamp is None:
-            timestamp = datetime.now()
-
-        # Validate short positions are allowed
-        if trading_mode == TradingMode.SPOT:
-            raise ValidationError("Short positions not allowed in SPOT trading mode")
-
-        # Ensure negative size for short position
-        position_size = -abs(size)
-
-        # Calculate margin used based on trading mode
-        margin_used = cls._calculate_margin_used(abs(size), entry_price, leverage, trading_mode)
+        """Factory method to create a short position."""
+        cls._validate_short_position_creation(trading_mode)
+        position_size, margin_used, effective_timestamp = cls._prepare_short_position_params(
+            size, entry_price, leverage, trading_mode, timestamp
+        )
 
         return cls(
             symbol=symbol,
             size=position_size,
             entry_price=entry_price,
             leverage=leverage,
-            timestamp=timestamp,
+            timestamp=effective_timestamp,
             position_type=PositionType.SHORT,
             margin_used=margin_used,
         )
@@ -277,36 +276,3 @@ class Position:
         else:
             # FUTURES/MARGIN trading: margin is reduced by leverage
             return notional_value / leverage
-
-
-@dataclass
-class Trade:
-    """Represents an executed trade."""
-
-    timestamp: datetime
-    symbol: Symbol
-    action: ActionType
-    quantity: float
-    price: float
-    leverage: float
-    fee: float
-    position_type: PositionType
-    pnl: float
-    margin_used: float
-
-    def __post_init__(self) -> None:
-        """Validate trade data after initialization."""
-        if self.quantity <= 0:
-            raise ValidationError(f"Quantity must be positive, got {self.quantity}")
-        if self.price <= 0:
-            raise ValidationError(f"Price must be positive, got {self.price}")
-        if self.leverage <= 0:
-            raise ValidationError(f"Leverage must be positive, got {self.leverage}")
-        if self.fee < 0:
-            raise ValidationError(f"Fee must be non-negative, got {self.fee}")
-        if self.margin_used < 0:
-            raise ValidationError(f"Margin used must be non-negative, got {self.margin_used}")
-
-    def notional_value(self) -> float:
-        """Calculate the notional value of the trade."""
-        return abs(self.quantity) * self.price
