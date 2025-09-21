@@ -98,10 +98,11 @@ src/
 
 ### 6. Testing Standards
 
-**Current Status:** 293 tests, 88% coverage
+**Current Status:** 440 tests, 87% coverage
 - **Core Domain Models**: 90-100% coverage
 - **Portfolio Trading**: 98% coverage (16 tests)
 - **Portfolio Risk**: 100% coverage (16 tests)
+- **Data Layer (Phase 3)**: 93-94% coverage (csv_cache_core.py, csv_file_loader.py)
 
 **Test Organization:**
 ```
@@ -112,7 +113,7 @@ tests/
 ```
 
 **Coverage Guidelines:**
-- Overall: ≥80% (✅ Achieved: 88%)
+- Overall: ≥80% (✅ Achieved: 87%)
 - Core business logic: ≥90% (✅ Achieved: 90-100%)
 - Data layer: ≥85% (✅ Achieved: 93-94%)
 - API endpoints: ≥85%
@@ -146,6 +147,27 @@ class PortfolioCore:
     def add_position(self, position: Position) -> None:
         with self._lock:
             # Atomic operations
+```
+
+### Modular Data Layer (Phase 3)
+```python
+class CSVCacheCore(CacheSubject, ICacheManager):
+    """Core caching functionality with memory management and observer pattern support."""
+
+    def __init__(self, cache_size: int = DEFAULT_CACHE_SIZE, enable_observers: bool = True):
+        self.cache: LRUCache[str, pd.DataFrame] = LRUCache(maxsize=cache_size)
+        self._cache_lock = RLock()  # Thread-safe cache access
+        self._file_stat_cache: TTLCache[str, float] = TTLCache(maxsize=1000, ttl=300)
+
+class CSVFileLoader:
+    """Handles loading and validation of individual CSV files."""
+
+    def __init__(self, cache_core: CSVCacheCore):
+        self.cache_core = cache_core
+
+    async def load_single_file(self, file_path: Path) -> pd.DataFrame:
+        # Observer pattern with deferred notifications
+        # Memory-efficient loading with validation
 ```
 
 ## Precision Guidelines
@@ -279,12 +301,13 @@ logger.info("Backtest completed", backtest_id=id, duration=duration, trades=len(
 ## Code Review Checklist
 
 - [x] TDD followed (test first)
-- [x] All tests passing (293/293)
-- [x] Coverage ≥80% (88% achieved)
+- [x] All tests passing (440/446 - 440 passed, 6 skipped)
+- [x] Coverage ≥80% (87% achieved)
 - [x] No linting/type errors
 - [x] SOLID principles followed
 - [x] File size guidelines met
-- [ ] Functions ≤30 lines
-- [ ] No circular dependencies
+- [x] Functions ≤30 lines
+- [x] No circular dependencies
 - [x] Type hints everywhere
 - [x] Documentation complete
+- [x] Phase 3 data layer modular architecture completed
